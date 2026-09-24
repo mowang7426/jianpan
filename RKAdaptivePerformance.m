@@ -7,6 +7,8 @@
 @property(nonatomic) BOOL enabled;
 @property(nonatomic) NSInteger level;
 @property(nonatomic) CFTimeInterval lastInput, previous, windowStart;
+@property(nonatomic) CFTimeInterval fastUntil;
+@property(nonatomic) NSUInteger quickIntervals;
 @property(nonatomic) NSUInteger samples, late, badWindows, goodWindows;
 + (instancetype)shared;
 - (void)stop;
@@ -36,6 +38,8 @@
     [self stop];
     self.level = 0;
     self.lastInput = 0;
+    self.fastUntil = 0;
+    self.quickIntervals = 0;
 }
 - (void)tick:(CADisplayLink *)link {
     CFTimeInterval now = CACurrentMediaTime();
@@ -65,16 +69,20 @@
 void RKAdaptiveSetEnabled(BOOL enabled) {
     RKAdaptiveMonitor *m = [RKAdaptiveMonitor shared];
     m.enabled = enabled;
-    if (!enabled) { [m stop]; m.level = 0; m.lastInput = 0; }
+    if (!enabled) { [m stop]; m.level = 0; m.lastInput = 0; m.fastUntil = 0; m.quickIntervals = 0; }
 }
 void RKAdaptiveNoteInput(void) {
     RKAdaptiveMonitor *m = [RKAdaptiveMonitor shared];
     if (!m.enabled) return;
     CFTimeInterval now = CACurrentMediaTime();
+    CFTimeInterval gap = m.lastInput ? now - m.lastInput : 100;
     // Retain the reduced level within this keyboard session. Recovery requires
     // stable samples, keyboard dismissal, backgrounding, or disabling the feature.
     if (!m.link) [m stop];
     m.lastInput = now;
+    if (gap > 0 && gap <= .18) m.quickIntervals++;
+    else m.quickIntervals = 0;
+    if (m.quickIntervals >= 2) m.fastUntil = now + .8;
     if (!m.link) {
         m.link = [CADisplayLink displayLinkWithTarget:m selector:@selector(tick:)];
         m.link.preferredFramesPerSecond = 20;
@@ -83,5 +91,9 @@ void RKAdaptiveNoteInput(void) {
 }
 NSInteger RKAdaptiveLevel(void) {
     RKAdaptiveMonitor *m = [RKAdaptiveMonitor shared];
-    return m.enabled ? m.level : 0;
+    return m.enabled ? MAX(m.level, RKAdaptiveFastInput() ? 1 : 0) : 0;
+}
+BOOL RKAdaptiveFastInput(void) {
+    RKAdaptiveMonitor *m = [RKAdaptiveMonitor shared];
+    return m.enabled && CACurrentMediaTime() < m.fastUntil;
 }

@@ -22,6 +22,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 @property(nonatomic,strong) NSDictionary *config;
 @property(nonatomic) CGFloat hue;
 @property(nonatomic) CGFloat pressHue;
+@property(nonatomic,strong) CALayer *fastFeedback;
 @property(nonatomic) NSInteger lastStyle;
 @property(nonatomic,strong) UIBezierPath *cachedGutterPath;
 @property(nonatomic,strong) NSArray<UIBezierPath *> *cachedFacePaths;
@@ -276,8 +277,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 - (void)showRippleAtPoint:(CGPoint)point sourceView:(UIView *)sourceView {
     // Configuration is cached and invalidated by the settings Darwin notification.
     // Do not perform preference/transport checks on every key press.
-    // Sample even when press effects are off but candidate effects remain on.
-    if (self.window && !self.hidden) RKAdaptiveNoteInput();
+    // Input activity is recorded once in sendEvent, before decoration coalescing.
     NSString *bid = NSBundle.mainBundle.bundleIdentifier.lowercaseString ?: @"";
     BOOL weType = [bid containsString:@"wetype"];
     if (![self flag:@"Enabled"] || ![self flag:@"RippleEnabled"] || ![self flag:weType ? @"WeChatKeyboard" : @"NativeKeyboard"]) {
@@ -285,6 +285,45 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         return;
     }
     if (!self.window || self.hidden) return;
+    if (RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2) {
+        CGRect pressed = CGRectNull;
+        for (NSValue *value in self.keyFrames) {
+            if (CGRectContainsPoint(value.CGRectValue, point)) { pressed = value.CGRectValue; break; }
+        }
+        if (CGRectIsNull(pressed)) return;
+        if (!self.fastFeedback) {
+            self.fastFeedback = [CALayer layer];
+            self.fastFeedback.name = @"RKFastInputFeedback";
+            self.fastFeedback.cornerRadius = 5;
+        }
+        // Reuse one layer and one animation key; no delayed per-press cleanup.
+        for (CALayer *layer in self.layer.sublayers.copy)
+            if (layer != self.fastFeedback) [layer removeFromSuperlayer];
+        if (self.fastFeedback.superlayer != self.layer) [self.layer addSublayer:self.fastFeedback];
+        NSInteger theme = [self.config[@"Theme"] integerValue];
+        BOOL preset = theme >= 1 && theme <= 9;
+        BOOL fixed = [self number:@"ColorMode" fallback:0 low:0 high:2] == 1;
+        self.pressHue = fmod(self.pressHue + .38196601125, 1);
+        CGFloat hue = fixed ? [self number:@"Hue" fallback:.55 low:0 high:1] : self.pressHue;
+        UIColor *color = (!preset && [self number:@"PressColorMode" fallback:0 low:0 high:1] == 1)
+            ? RKKeyboardColor(self.config, @"PressColor")
+            : [UIColor colorWithHue:hue saturation:[self neonSaturation:1] brightness:1 alpha:1];
+        CGFloat bright = [self number:preset ? @"Brightness" : @"PressBrightness" fallback:1 low:0 high:1];
+        [CATransaction begin];
+        [CATransaction setDisableActions:YES];
+        self.fastFeedback.frame = CGRectInset(pressed, 2, 2);
+        self.fastFeedback.backgroundColor = color.CGColor;
+        self.fastFeedback.opacity = 0;
+        [CATransaction commit];
+        CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
+        fade.fromValue = @(.32 * bright);
+        fade.toValue = @0;
+        fade.duration = .12;
+        [self.fastFeedback addAnimation:fade forKey:@"fastFade"];
+        return;
+    }
+    [self.fastFeedback removeAllAnimations];
+    [self.fastFeedback removeFromSuperlayer];
     NSInteger adaptiveLevel = RKAdaptiveLevel();
     NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:2];
     // Severe pressure: use a bounded single-key effect instead of whole-keyboard waves.

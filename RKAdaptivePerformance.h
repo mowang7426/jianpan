@@ -10,6 +10,7 @@ extern "C" {
 void RKAdaptiveSetEnabled(BOOL enabled);
 void RKAdaptiveNoteInput(void);
 NSInteger RKAdaptiveLevel(void);
+BOOL RKAdaptiveFastInput(void);
 
 #ifdef __cplusplus
 }
