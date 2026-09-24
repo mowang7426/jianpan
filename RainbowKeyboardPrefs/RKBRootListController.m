@@ -486,7 +486,9 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
                                                               cell:PSLinkCell
                                                               edit:nil];
         [mode setProperty:@"CandidateGradientMode" forKey:@"key"];
-        [mode setProperty:@"chooseCandidateGradientMode" forKey:@"action"];
+        // Programmatic specifiers need a selector binding; an "action" property
+        // string is only interpreted when loading specifiers from a plist.
+        [mode setButtonAction:@selector(chooseCandidateGradientMode)];
         [items addObject:mode];
 
         PSSpecifier *colorGroup = [PSSpecifier preferenceSpecifierNamed:@"候选词颜色"
@@ -505,7 +507,7 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
                                                              detail:nil
                                                                cell:PSLinkCell
                                                                edit:nil];
-        [start setProperty:@"chooseCandidateStart" forKey:@"action"];
+        [start setButtonAction:@selector(chooseCandidateStart)];
         [items addObject:start];
 
         PSSpecifier *end = [PSSpecifier preferenceSpecifierNamed:@"结束颜色"
@@ -515,7 +517,7 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
                                                            detail:nil
                                                              cell:PSLinkCell
                                                              edit:nil];
-        [end setProperty:@"chooseCandidateEnd" forKey:@"action"];
+        [end setButtonAction:@selector(chooseCandidateEnd)];
         [items addObject:end];
 
         PSSpecifier *inputGroup = [PSSpecifier preferenceSpecifierNamed:@"输入法"
