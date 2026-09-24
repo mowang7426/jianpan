@@ -22,7 +22,7 @@ typedef NS_OPTIONS(NSUInteger, RKClassNameFeatures) {
     RKFeatureCandidateUI    = 1 << 8, // 原生候选/预测视图（UIKB*/TUI*/_UIKeyboardCandidate 前缀族）
     RKFeatureCandidateArea  = 1 << 9, // 仅 candidate/prediction/suggestion 子串（候选文字区域，不含工具条）
 };
-FOUNDATION_EXPORT NSUInteger RKClassNameFeatures(Class cls);
+FOUNDATION_EXPORT NSUInteger RKClassFeatures(Class cls);
 
 // 键盘布局是否发生变化：keyplane / keys 指针或 host.bounds 任一变化返回 YES。
 // 布局未变时调用方应复用既有 keyFrames，避免定时全量扫描。

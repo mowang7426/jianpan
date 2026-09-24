@@ -15,7 +15,7 @@ static NSMapTable *RKFeatureCache(void) {
     return cache;
 }
 
-NSUInteger RKClassNameFeatures(Class cls) {
+NSUInteger RKClassFeatures(Class cls) {
     NSNumber *cached = [RKFeatureCache() objectForKey:cls];
     if (cached) return cached.unsignedIntegerValue;
     NSString *name = NSStringFromClass(cls).lowercaseString;
@@ -67,7 +67,7 @@ static void RKKeyboardSessionInstallObservers(void) {
 #pragma mark - 排除区 / 键盘宿主判定（P0-1 + P1-5 宿主缓存）
 
 BOOL RKKeyboardExcludedView(UIView *view) {
-    if ((RKClassNameFeatures(view.class) & RKFeatureExcluded) != 0) return YES;
+    if ((RKClassFeatures(view.class) & RKFeatureExcluded) != 0) return YES;
     return [view isKindOfClass:RainbowEffectView.class];
 }
 
@@ -98,7 +98,7 @@ UIView *RKKeyboardEffectHost(UIView *view) {
     UIView *fallback = nil;
     for (UIView *parent = view; parent && ![parent isKindOfClass:UIWindow.class]; parent = parent.superview) {
         if (RKKeyboardExcludedView(parent)) return nil;
-        NSUInteger features = RKClassNameFeatures(parent.class);
+        NSUInteger features = RKClassFeatures(parent.class);
         if (features & RKFeatureLayoutStar) { RKCacheEffectHost(view, parent); return parent; }
         // Remote input containers also contain the dock, not just key rows.
         if (features & RKFeatureInputContainer) break;
@@ -201,7 +201,7 @@ static void RKViewKeys(UIView *node, UIView *host, NSMutableArray *frames, NSUIn
     if (depth > 12 || frames.count >= 100) return;
     for (UIView *view in node.subviews) {
         if (view.hidden || view.alpha < .01 || RKKeyboardExcludedView(view)) continue;
-        NSUInteger features = RKClassNameFeatures(view.class);
+        NSUInteger features = RKClassFeatures(view.class);
         BOOL key = [view isKindOfClass:UIButton.class] ||
             (features & (RKFeatureKeycap | RKFeatureKeyview | RKFeatureKeybutton)) != 0;
         CGRect rect = [view convertRect:view.bounds toView:host];

@@ -108,14 +108,14 @@ static NSDictionary *RKCandidateReadPreferences(void) {
 
 static BOOL RKCandidateRegion(UIView *view) {
     for (UIView *p = view; p; p = p.superview) {
-        if ((RKClassNameFeatures(p.class) & RKFeatureCandidateArea) != 0) return YES;
+        if ((RKClassFeatures(p.class) & RKFeatureCandidateArea) != 0) return YES;
         if ([p isKindOfClass:UIWindow.class]) break;
     }
     return NO;
 }
 static BOOL RKNativeCandidateRegion(UIView *view) {
     for (UIView *parent = view; parent; parent = parent.superview) {
-        if ((RKClassNameFeatures(parent.class) & RKFeatureCandidateUI) != 0) return YES;
+        if ((RKClassFeatures(parent.class) & RKFeatureCandidateUI) != 0) return YES;
         if ([parent isKindOfClass:UIWindow.class]) break;
     }
     return NO;

@@ -1139,7 +1139,7 @@ static void RKScanWeTypeKeys(UIView *node, UIView *host, NSUInteger depth) {
     if (depth > 12) return;
     for (UIView *view in node.subviews) {
         if (RKBlackExcludedView(view)) continue;
-        NSUInteger features = RKClassNameFeatures(view.class);
+        NSUInteger features = RKClassFeatures(view.class);
         BOOL key = [view isKindOfClass:UIButton.class] ||
             (features & (RKFeatureKeyview | RKFeatureKeybutton | RKFeatureKeycap | RKFeatureSuffixKey)) != 0;
         BOOL sized = view.bounds.size.width >= 10 && view.bounds.size.width <= host.bounds.size.width * .92 &&

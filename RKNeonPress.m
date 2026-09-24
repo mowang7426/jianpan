@@ -70,7 +70,7 @@ static UIView *RKPressKeyView(UIView *node, UIView *host, CGRect frame, NSUInteg
     if (depth > 12) return nil;
     for (UIView *view in node.subviews) {
         if (view.hidden || view.alpha < .01 || RKKeyboardExcludedView(view)) continue;
-        NSUInteger features = RKClassNameFeatures(view.class);
+        NSUInteger features = RKClassFeatures(view.class);
         BOOL key = [view isKindOfClass:UIButton.class] ||
             (features & (RKFeatureKeyview | RKFeatureKeycap | RKFeatureKeybutton)) != 0;
         CGRect candidate = [view convertRect:view.bounds toView:host];
