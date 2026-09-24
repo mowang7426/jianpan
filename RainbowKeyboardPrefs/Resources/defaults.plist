@@ -1,5 +1,9 @@
 {
     Enabled = 1;
+    Theme = 0;
+    CandidateGradientMode = 1;
+    CandidateGradientSpeed = 0.65;
+    CandidateGradientIntensity = 1.0;
     EffectStyle = 0;
     AmbientGlow = 1;
     AmbientStrength = 0.85;
