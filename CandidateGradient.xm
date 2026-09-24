@@ -4,6 +4,18 @@
 #import <mach-o/dyld.h>
 #import <os/lock.h>
 #import "RKPreferences.h"
+#import "RKThemeEngine.h"
+
+static void RKCandidateDisplayTick(CADisplayLink *link);
+
+@interface RKCandidateAnimatorProxy : NSObject
++ (instancetype)shared;
+- (void)tick:(CADisplayLink *)link;
+@end
+@implementation RKCandidateAnimatorProxy
++ (instancetype)shared { static RKCandidateAnimatorProxy *p; static dispatch_once_t once; dispatch_once(&once, ^{ p=[self new]; }); return p; }
+- (void)tick:(CADisplayLink *)link { RKCandidateDisplayTick(link); }
+@end
 
 static NSDictionary *RKCandidatePrefs;
 static NSHashTable<UIView *> *RKCandidateViews;
@@ -18,9 +30,62 @@ static NSUInteger RKNativeLabelDraws;
 static os_unfair_lock RKHookLock = OS_UNFAIR_LOCK_INIT;
 static BOOL RKHookInstallQueued;
 static void RKWriteNativeDiagnostic(void);
+static CADisplayLink *RKCandidateDisplayLink;
+static CFTimeInterval RKCandidatePhaseStart;
+static CFTimeInterval RKCandidateLastReload;
+static NSUInteger RKCandidateActivitySerial;
+static CFTimeInterval RKCandidateInputPulseUntil;
+
+static NSInteger RKCandidateGradientMode(void) {
+    NSInteger mode = [RKCandidatePrefs[@"CandidateGradientMode"] integerValue];
+    if (mode < 0 || mode > 5) mode = 1;
+    return mode;
+}
+static CGFloat RKCandidateGradientSpeed(void) {
+    CGFloat v = [RKCandidatePrefs[@"CandidateGradientSpeed"] doubleValue];
+    return isfinite(v) ? MIN(2.0, MAX(.05, v)) : .65;
+}
+static CGFloat RKCandidateGradientIntensity(void) {
+    CGFloat v = [RKCandidatePrefs[@"CandidateGradientIntensity"] doubleValue];
+    return isfinite(v) ? MIN(1.0, MAX(.1, v)) : 1.0;
+}
+static void RKCandidateInvalidateViews(void) {
+    for (UIView *view in RKCandidateViews.allObjects) {
+        [view.layer setNeedsDisplay];
+        [view setNeedsDisplay];
+    }
+}
+static void RKCandidateDisplayTick(CADisplayLink *link) {
+    if (RKCandidateGradientMode() <= 1 || RKCandidateViews.count == 0) {
+        [link invalidate];
+        RKCandidateDisplayLink = nil;
+        return;
+    }
+    RKCandidateInvalidateViews();
+}
+static void RKCandidateInputChanged(NSNotification *note) {
+    RKCandidateInputPulseUntil = CACurrentMediaTime() + .32;
+    RKCandidatePhaseStart = CACurrentMediaTime();
+}
+
+static void RKCandidateUpdateAnimationState(void) {
+    NSInteger mode = RKCandidateGradientMode();
+    if (mode > 1 && RKCandidateViews.count > 0 && !RKCandidateDisplayLink) {
+        RKCandidatePhaseStart = CACurrentMediaTime();
+        // Keep a single lightweight proxy; never retain candidate views.
+        RKCandidateDisplayLink = [CADisplayLink displayLinkWithTarget:[RKCandidateAnimatorProxy shared] selector:@selector(tick:)];
+        RKCandidateDisplayLink.preferredFramesPerSecond = 30;
+        [RKCandidateDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
+    } else if (mode <= 1 && RKCandidateDisplayLink) {
+        [RKCandidateDisplayLink invalidate];
+        RKCandidateDisplayLink = nil;
+    }
+}
+
 
 static NSDictionary *RKCandidateReadPreferences(void) {
-    return RKReadEffectivePreferences();
+    // Candidate gradients are intentionally independent from keyboard themes.
+    return RKReadStoredPreferences();
 }
 
 static BOOL RKCandidateRegion(UIView *view) {
@@ -65,6 +130,10 @@ static void RKCandidateReload(void) {
     NSDictionary *preferences = RKCandidateReadPreferences();
     if ([RKCandidatePrefs isEqual:preferences]) return;
     RKCandidatePrefs = preferences;
+    RKCandidateLastReload = CACurrentMediaTime();
+    RKCandidateActivitySerial++;
+    RKCandidatePhaseStart = RKCandidateLastReload;
+    RKCandidateUpdateAnimationState();
     for (UIView *view in RKCandidateViews.allObjects) {
         // Drop our rendered pixels, not the original text, so disabled gradients
         // do not remain in a reused label's backing layer.
@@ -81,11 +150,65 @@ static void RKCandidateReload(void) {
 static void RKCandidateChanged(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef info) {
     dispatch_async(dispatch_get_main_queue(), ^{ RKCandidateReload(); });
 }
+static UIColor *RKCandidateShiftedColor(UIColor *color, CGFloat hueShift, CGFloat alphaScale) {
+    CGFloat h=0,s=0,b=0,a=0;
+    if (![color getHue:&h saturation:&s brightness:&b alpha:&a]) return [color colorWithAlphaComponent:a*alphaScale];
+    h = fmod(h + hueShift + 1.0, 1.0);
+    return [UIColor colorWithHue:h saturation:s brightness:b alpha:a*alphaScale];
+}
 static void RKDrawGradientText(CGRect rect, CGRect textRect, void (^original)(void)) {
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     if (RKCandidateDrawingDepth || !ctx || CGRectIsEmpty(textRect)) { original(); return; }
+    NSInteger mode = RKCandidateGradientMode();
+    if (mode == 0) { original(); return; }
     UIColor *first = RKCandidateColor(RKCandidatePrefs[@"CandidateStart"], [UIColor colorWithRed:0 green:.65 blue:1 alpha:1]);
     UIColor *last = RKCandidateColor(RKCandidatePrefs[@"CandidateEnd"], [UIColor colorWithRed:.85 green:.15 blue:1 alpha:1]);
+    CGFloat intensity = RKCandidateGradientIntensity();
+    CFTimeInterval now = CACurrentMediaTime();
+    CGFloat phase = fmod((now - RKCandidatePhaseStart) * RKCandidateGradientSpeed(), 1.0);
+    if (mode == 5 && RKCandidateInputPulseUntil > now) {
+        CGFloat pulse = (CGFloat)((RKCandidateInputPulseUntil - now) / .32);
+        phase = fmod(phase + pulse * .16, 1.0);
+    }
+    if (mode == 2 || mode == 5) {
+        first = RKCandidateShiftedColor(first, phase, intensity);
+        last = RKCandidateShiftedColor(last, phase, intensity);
+    } else if (mode == 3) {
+        CGFloat breathe = .55 + .45 * (0.5 + 0.5 * sin((CACurrentMediaTime()-RKCandidatePhaseStart) * RKCandidateGradientSpeed() * M_PI * 2.0));
+        first = [first colorWithAlphaComponent:breathe * intensity];
+        last = [last colorWithAlphaComponent:breathe * intensity];
+    } else if (mode == 4) {
+        NSArray *base = @[[UIColor colorWithHue:0 saturation:1 brightness:1 alpha:intensity],
+                          [UIColor colorWithHue:.14 saturation:1 brightness:1 alpha:intensity],
+                          [UIColor colorWithHue:.33 saturation:1 brightness:1 alpha:intensity],
+                          [UIColor colorWithHue:.58 saturation:1 brightness:1 alpha:intensity],
+                          [UIColor colorWithHue:.82 saturation:1 brightness:1 alpha:intensity]];
+        NSMutableArray *rainbow = [NSMutableArray arrayWithCapacity:base.count];
+        for (UIColor *c in base) [rainbow addObject:(id)[RKCandidateShiftedColor(c, phase, 1) CGColor]];
+        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+        CGGradientRef gradient = CGGradientCreateWithColors(space, (__bridge CFArrayRef)rainbow, NULL);
+        CGColorSpaceRelease(space);
+        if (!gradient) { original(); return; }
+        RKCandidateRenderCount++;
+        CGContextSaveGState(ctx);
+        CGContextClipToRect(ctx, rect);
+        CGContextBeginTransparencyLayer(ctx, NULL);
+        RKCandidateDrawingDepth++;
+        @try {
+            original();
+            CGContextSetBlendMode(ctx, kCGBlendModeSourceIn);
+            CGContextDrawLinearGradient(ctx, gradient,
+                CGPointMake(CGRectGetMinX(textRect) - CGRectGetWidth(textRect)*phase, CGRectGetMidY(textRect)),
+                CGPointMake(CGRectGetMaxX(textRect) - CGRectGetWidth(textRect)*phase, CGRectGetMidY(textRect)),
+                kCGGradientDrawsBeforeStartLocation | kCGGradientDrawsAfterEndLocation);
+        } @finally {
+            RKCandidateDrawingDepth--;
+            CGContextEndTransparencyLayer(ctx);
+            CGContextRestoreGState(ctx);
+            CGGradientRelease(gradient);
+        }
+        return;
+    }
     NSArray *colors = @[(id)first.CGColor,(id)last.CGColor];
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
     CGGradientRef gradient = CGGradientCreateWithColors(space, (__bridge CFArrayRef)colors, NULL);
@@ -99,9 +222,10 @@ static void RKDrawGradientText(CGRect rect, CGRect textRect, void (^original)(vo
     @try {
         original();
         CGContextSetBlendMode(ctx, kCGBlendModeSourceIn);
+        CGFloat offset = (mode == 2 || mode == 5) ? CGRectGetWidth(textRect) * phase * .35 : 0;
         CGContextDrawLinearGradient(ctx, gradient,
-            CGPointMake(CGRectGetMinX(textRect), CGRectGetMidY(textRect)),
-            CGPointMake(CGRectGetMaxX(textRect), CGRectGetMidY(textRect)),
+            CGPointMake(CGRectGetMinX(textRect)-offset, CGRectGetMidY(textRect)),
+            CGPointMake(CGRectGetMaxX(textRect)-offset, CGRectGetMidY(textRect)),
             kCGGradientDrawsBeforeStartLocation | kCGGradientDrawsAfterEndLocation);
     } @finally {
         RKCandidateDrawingDepth--;
@@ -115,6 +239,7 @@ static void RKDrawCandidate(UILabel *label, CGRect rect, BOOL native, void (^ori
     BOOL region = native ? RKNativeCandidateRegion(label) : RKCandidateRegion(label);
     if (!region || RKCandidateDrawingDepth) { original(); return; }
     [RKCandidateViews addObject:label];
+    RKCandidateUpdateAnimationState();
     if (!RKCandidateFlag(@"CandidateGradient") ||
         !RKCandidateFlag(native ? @"CandidateNative" : @"CandidateWeType")) {
         RKCandidateDrawingDepth++;
@@ -136,6 +261,7 @@ static BOOL RKNativeTextDrawingEnabled(void) {
 // its background, and use their ink bounds so short words get both endpoint colors.
 static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^original)(void)) {
     [RKCandidateViews addObject:view];
+    RKCandidateUpdateAnimationState();
     CGRect bounds = view.bounds;
     if (!RKCandidateFlag(@"CandidateGradient") ||
         !RKCandidateFlag(RKCandidateIsWeType(view) ? @"CandidateWeType" : @"CandidateNative") ||
@@ -350,6 +476,8 @@ static void RKWriteNativeDiagnostic(void) {
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, RKCandidateChanged,
             CFSTR("com.minis.rainbowkeyboard.changed"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
         [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { RKCandidateReload(); }];
+        [[NSNotificationCenter defaultCenter] addObserverForName:UITextFieldTextDidChangeNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { RKCandidateInputChanged(note); }];
+        [[NSNotificationCenter defaultCenter] addObserverForName:UITextViewTextDidChangeNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) { RKCandidateInputChanged(note); }];
         [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardDidShowNotification object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
             RKCandidateReload();
             dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{

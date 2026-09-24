@@ -4,6 +4,7 @@
 #import <QuartzCore/QuartzCore.h>
 #import <math.h>
 #import "RKPreferences.h"
+#import "RKThemeEngine.h"
 static NSDictionary *RKReadPreferences(void) {
     return RKReadEffectivePreferences();
 }
@@ -47,7 +48,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         CFSTR("com.minis.rainbowkeyboard.changed"), NULL);
 }
 - (void)reloadConfiguration {
-    NSDictionary *newConfig = RKReadPreferences();
+    NSDictionary *newConfig = RKThemeMergedPreferences(RKReadPreferences());
     if (!newConfig) newConfig = @{};
     self.config = newConfig;
 }
