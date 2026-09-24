@@ -5,9 +5,6 @@
 #import <os/lock.h>
 #import "RKPreferences.h"
 
-// Forward declaration: used by RKCandidateAnimatorProxy before its implementation.
-static NSInteger RKCandidateGradientMode(void);
-
 static NSHashTable<UIView *> *RKCandidateViews;
 static CADisplayLink *RKCandidateDisplayLink;
 static CFTimeInterval RKCandidatePhaseStart;
@@ -21,20 +18,12 @@ static CFTimeInterval RKCandidateInputPulseUntil;
 + (instancetype)shared { static RKCandidateAnimatorProxy *p; static dispatch_once_t once; dispatch_once(&once, ^{ p=[self new]; }); return p; }
 - (void)tick:(CADisplayLink *)link {
     if (!RKCandidateDisplayLink) return;
-
-    NSInteger mode = RKCandidateGradientMode();
-    NSArray<UIView *> *views = RKCandidateViews.allObjects;
-
-    if (mode <= 1 || views.count == 0) {
+    if (RKCandidateGradientMode() <= 1 || RKCandidateViews.count == 0) {
         [link invalidate];
         RKCandidateDisplayLink = nil;
         return;
     }
-
-    for (UIView *view in views) {
-        [view.layer setNeedsDisplay];
-        [view setNeedsDisplay];
-    }
+    for (UIView *view in RKCandidateViews.allObjects) { [view.layer setNeedsDisplay]; [view setNeedsDisplay]; }
 }
 @end
 
@@ -235,8 +224,6 @@ static void RKDrawCandidate(UILabel *label, CGRect rect, BOOL native, void (^ori
     BOOL region = native ? RKNativeCandidateRegion(label) : RKCandidateRegion(label);
     if (!region || RKCandidateDrawingDepth) { original(); return; }
     [RKCandidateViews addObject:label];
-    RKCandidateUpdateAnimationState();
-
     if (!RKCandidateFlag(@"CandidateGradient") ||
         !RKCandidateFlag(native ? @"CandidateNative" : @"CandidateWeType")) {
         RKCandidateDrawingDepth++;
@@ -258,8 +245,6 @@ static BOOL RKNativeTextDrawingEnabled(void) {
 // its background, and use their ink bounds so short words get both endpoint colors.
 static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^original)(void)) {
     [RKCandidateViews addObject:view];
-    RKCandidateUpdateAnimationState();
-
     CGRect bounds = view.bounds;
     if (!RKCandidateFlag(@"CandidateGradient") ||
         !RKCandidateFlag(RKCandidateIsWeType(view) ? @"CandidateWeType" : @"CandidateNative") ||
@@ -410,8 +395,6 @@ static void RKWriteNativeDiagnostic(void) {
     BOOL candidate = RKNativeCandidateRegion(self);
     if (!candidate) { %orig; return; }
     [RKCandidateViews addObject:self];
-    RKCandidateUpdateAnimationState();
-
     NSUInteger before = RKCandidateRenderCount;
     RKNativeDrawingScope++;
     @try { %orig; } @finally {
