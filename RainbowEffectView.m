@@ -292,8 +292,16 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
             BOOL single = [self number:@"PressColorMode" fallback:0 low:0 high:1] == 1;
             UIColor *color = single ? RKKeyboardColor(self.config, @"PressColor") :
                 [UIColor colorWithHue:self.pressHue saturation:1 brightness:1 alpha:1];
+            CGFloat pressBrightness = [self number:@"PressBrightness" fallback:1 low:0 high:1];
+            NSInteger theme = [self.config[@"Theme"] integerValue];
+            if (theme >= 1 && theme <= 9) {
+                // Preset themes take priority; Custom retains independent press colors.
+                color = [UIColor colorWithHue:hue saturation:[self neonSaturation:1]
+                                   brightness:1 alpha:1];
+                pressBrightness = brightness;
+            }
             RKShowNeonKeyPress(self, value.CGRectValue, color,
-                [self number:@"PressBrightness" fallback:1 low:0 high:1],
+                pressBrightness,
                 duration, UIAccessibilityIsReduceMotionEnabled(), sourceView);
             break;
         }

@@ -22,7 +22,7 @@ static inline NSArray<NSString *> *RKDisplayColors(void) {
 static inline NSArray<NSString *> *RKDisplayKeys(void) {
     return [[[RKDisplayNumbers() arrayByAddingObjectsFromArray:RKDisplayFlags()]
         arrayByAddingObjectsFromArray:RKDisplayColors()]
-        arrayByAddingObjectsFromArray:@[@"PressColorMode", @"PressBrightness", @"PressColor"]];
+        arrayByAddingObjectsFromArray:@[@"PressColorMode", @"PressBrightness", @"PressColor", @"Theme"]];
 }
 static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[RKDisplayWordCount]) {
     memset(words, 0, RKDisplayWordCount * sizeof(uint64_t));
@@ -61,6 +61,14 @@ static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[R
         if ([value boolValue]) words[1] |= UINT64_C(1) << (31 + i);
     }
     // Optional extension in v2's unused bits. Older clients ignore these fields.
+    // Theme uses spare bits 45..49, leaving existing snapshot fields intact.
+    id theme = prefs[@"Theme"];
+    if ([theme isKindOfClass:NSNumber.class] && isfinite([theme doubleValue]) &&
+        [theme doubleValue] == [theme integerValue] &&
+        [theme integerValue] >= 0 && [theme integerValue] <= 9) {
+        words[1] |= UINT64_C(1) << 45;
+        words[1] |= (uint64_t)[theme integerValue] << 46;
+    }
     id mode = prefs[@"PressColorMode"];
     if ([mode isKindOfClass:NSNumber.class] && isfinite([mode doubleValue])) {
         words[1] |= UINT64_C(1) << 41;
@@ -117,6 +125,11 @@ static inline NSDictionary *RKDecodeDisplaySnapshot(const uint64_t words[RKDispl
     }
     for (NSUInteger i = 0; i < flags.count; i++)
         if (words[1] & (UINT64_C(1) << (21 + i))) result[flags[i]] = @((words[1] >> (31 + i)) & 1);
+    if (words[1] & (UINT64_C(1) << 45)) {
+        NSUInteger theme = (words[1] >> 46) & 15;
+        if (theme > 9) return nil;
+        result[@"Theme"] = @(theme);
+    }
     if (words[1] & (UINT64_C(1) << 41)) result[@"PressColorMode"] = @((words[1] >> 42) & 1);
     if (words[1] & (UINT64_C(1) << 43)) {
         uint32_t bits = (uint32_t)(words[14] >> 32);
