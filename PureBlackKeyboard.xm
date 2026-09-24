@@ -176,22 +176,32 @@ static BOOL __attribute__((unused)) RKBlackEnabledForBundle(NSString *bundle) {
     return YES;
 }
 
+static BOOL RKBlackEnabledValue;
+static BOOL RKBlackEnabledValid;
+
 static BOOL RKBlackEnabled(void) {
+    // P0-2: 结果缓存为静态 BOOL，仅在设置变更/键盘显示等 RKBlackReload 时失效；
+    // 该函数被全局钩子高频调用，从"每次 3 次字典查询"降到"1 次布尔读"。
+    if (RKBlackEnabledValid) return RKBlackEnabledValue;
     static NSString *keyboard;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
         keyboard = [NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"] ?
             @"WeChatKeyboard" : @"NativeKeyboard";
     });
-    return (!RKBlackPrefs[@"Enabled"] || [RKBlackPrefs[@"Enabled"] boolValue]) &&
+    BOOL result = (!RKBlackPrefs[@"Enabled"] || [RKBlackPrefs[@"Enabled"] boolValue]) &&
         (!RKBlackPrefs[keyboard] || [RKBlackPrefs[keyboard] boolValue]) &&
         (!RKBlackPrefs[@"PureBlackKeyboard"] || [RKBlackPrefs[@"PureBlackKeyboard"] boolValue]);
+    RKBlackEnabledValue = result;
+    RKBlackEnabledValid = YES;
+    return result;
 }
 
 static void RKBlackReload(void) {
     NSDictionary *preferences = RKReadEffectivePreferences();
     if ([RKBlackPrefs isEqual:preferences]) return;
     RKBlackPrefs = preferences;
+    RKBlackEnabledValid = NO; // P0-2: 设置变化后让 RKBlackEnabled 缓存失效重算
     for (UIView *view in RKBlackViews.allObjects) {
         [view setNeedsLayout];
         [view setNeedsDisplay];
@@ -1129,9 +1139,9 @@ static void RKScanWeTypeKeys(UIView *node, UIView *host, NSUInteger depth) {
     if (depth > 12) return;
     for (UIView *view in node.subviews) {
         if (RKBlackExcludedView(view)) continue;
-        NSString *name = NSStringFromClass(view.class).lowercaseString;
-        BOOL key = [view isKindOfClass:UIButton.class] || [name containsString:@"keyview"] ||
-            [name containsString:@"keybutton"] || [name containsString:@"keycap"] || [name hasSuffix:@"key"];
+        NSUInteger features = RKClassNameFeatures(view.class);
+        BOOL key = [view isKindOfClass:UIButton.class] ||
+            (features & (RKFeatureKeyview | RKFeatureKeybutton | RKFeatureKeycap | RKFeatureSuffixKey)) != 0;
         BOOL sized = view.bounds.size.width >= 10 && view.bounds.size.width <= host.bounds.size.width * .92 &&
             view.bounds.size.height >= 14 && view.bounds.size.height <= 120;
         if (key && sized) {
@@ -1212,11 +1222,12 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setPath:(CGPathRef)path {
     %orig;
 
-    RKRefreshBlackFaceGeometry((CALayer *)self);
+    if (RKKeyboardSessionActive()) RKRefreshBlackFaceGeometry((CALayer *)self);
 }
 - (void)setFillColor:(CGColorRef)color {
     %orig;
 
+    if (!RKKeyboardSessionActive()) return;
     if (objc_getAssociatedObject(self, &RKBlackUpdatingColorKey) || !NSThread.isMainThread) return;
     RKRefreshBlackFaceGeometry((CALayer *)self);
     if ([objc_getAssociatedObject(self, &RKBlackFaceStyleKey) boolValue])
@@ -1227,7 +1238,8 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setColors:(NSArray *)colors {
     %orig;
 
-    if ([objc_getAssociatedObject(self, &RKBlackFaceStyleKey) boolValue] && NSThread.isMainThread)
+    if (RKKeyboardSessionActive() &&
+        [objc_getAssociatedObject(self, &RKBlackFaceStyleKey) boolValue] && NSThread.isMainThread)
         RKUpdateBlackGradient((CAGradientLayer *)self, RKBlackEnabled());
 }
 %end
@@ -1235,9 +1247,10 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)didAddSubview:(UIView *)subview {
     %orig;
 
-    RKPrepareAttachedKeyLayer(subview.layer);
+    if (RKKeyboardSessionActive()) RKPrepareAttachedKeyLayer(subview.layer);
 }
 - (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)context {
+    if (!RKKeyboardSessionActive()) { %orig(layer, context); return; }
     RKDrawBlackKeyLayer((UIView *)self, layer, context, ^(CGContextRef drawing) {
         %orig(layer, drawing);
     });
@@ -1256,12 +1269,14 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setHighlighted:(BOOL)highlighted {
     %orig;
 
+    if (!RKKeyboardSessionActive()) return;
     CALayer *root = RKBlackKeyRoot(((UIView *)self).layer);
     if ([root.delegate isKindOfClass:UIView.class]) RKRefreshBlackKeyState((UIView *)root.delegate);
 }
 - (void)setSelected:(BOOL)selected {
     %orig;
 
+    if (!RKKeyboardSessionActive()) return;
     CALayer *root = RKBlackKeyRoot(((UIView *)self).layer);
     if ([root.delegate isKindOfClass:UIView.class]) RKRefreshBlackKeyState((UIView *)root.delegate);
 }
@@ -1270,7 +1285,8 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setBackgroundImage:(UIImage *)image forState:(UIControlState)state {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKBlackButtonImagesKey) && NSThread.isMainThread)
+    if (RKKeyboardSessionActive() &&
+        objc_getAssociatedObject(self, &RKBlackButtonImagesKey) && NSThread.isMainThread)
         RKUpdateBlackButton((UIButton *)self, RKBlackEnabled());
 }
 %end
@@ -1278,19 +1294,19 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setImage:(UIImage *)image {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
         RKUpdateBlackUIImage((UIImageView *)self, RKBlackEnabled());
 }
 - (void)setHighlightedImage:(UIImage *)image {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
         RKUpdateBlackUIImage((UIImageView *)self, RKBlackEnabled());
 }
 - (void)setHighlighted:(BOOL)highlighted {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
         RKUpdateBlackUIImage((UIImageView *)self, RKBlackEnabled());
 }
 %end
@@ -1298,13 +1314,13 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setTextColor:(UIColor *)color {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKBlackLabelManagedKey))
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKBlackLabelManagedKey))
         RKUpdateBlackLabel((UILabel *)self, RKBlackEnabled());
 }
 - (void)setAttributedText:(NSAttributedString *)text {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKBlackLabelManagedKey))
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKBlackLabelManagedKey))
         RKUpdateBlackLabel((UILabel *)self, RKBlackEnabled());
 }
 %end
@@ -1313,40 +1329,43 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setBounds:(CGRect)bounds {
     %orig;
 
+    if (!RKKeyboardSessionActive()) return;
     if ([self isKindOfClass:CAShapeLayer.class] || [self isKindOfClass:CAGradientLayer.class])
         RKRefreshBlackFaceGeometry((CALayer *)self);
 }
 - (void)addSublayer:(CALayer *)layer {
     %orig;
 
-    RKPrepareAttachedKeyLayer(layer);
+    if (RKKeyboardSessionActive()) RKPrepareAttachedKeyLayer(layer);
 }
 - (void)insertSublayer:(CALayer *)layer atIndex:(unsigned int)index {
     %orig;
 
-    RKPrepareAttachedKeyLayer(layer);
+    if (RKKeyboardSessionActive()) RKPrepareAttachedKeyLayer(layer);
 }
 - (void)insertSublayer:(CALayer *)layer below:(CALayer *)sibling {
     %orig;
 
-    RKPrepareAttachedKeyLayer(layer);
+    if (RKKeyboardSessionActive()) RKPrepareAttachedKeyLayer(layer);
 }
 - (void)insertSublayer:(CALayer *)layer above:(CALayer *)sibling {
     %orig;
 
-    RKPrepareAttachedKeyLayer(layer);
+    if (RKKeyboardSessionActive()) RKPrepareAttachedKeyLayer(layer);
 }
 - (void)replaceSublayer:(CALayer *)oldLayer with:(CALayer *)newLayer {
     %orig;
 
-    RKPrepareAttachedKeyLayer(newLayer);
+    if (RKKeyboardSessionActive()) RKPrepareAttachedKeyLayer(newLayer);
 }
 - (void)setSublayers:(NSArray *)layers {
     %orig;
 
+    if (!RKKeyboardSessionActive()) return;
     for (CALayer *layer in layers) RKPrepareAttachedKeyLayer(layer);
 }
 - (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key {
+    if (!RKKeyboardSessionActive()) { %orig(animation, key); return; }
     if (RKBlackKeyRoot((CALayer *)self)) {
         CAAnimation *filtered = RKKeyColorAnimation((CALayer *)self, animation);
         if (!filtered) return;
@@ -1357,6 +1376,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 
 }
 - (void)setHidden:(BOOL)hidden {
+    if (!RKKeyboardSessionActive()) { %orig(hidden); return; }
     if (objc_getAssociatedObject(self, &RKBlackHidingKey)) { %orig;
  return; }
     NSNumber *original = objc_getAssociatedObject(self, &RKBlackHiddenKey);
@@ -1374,7 +1394,8 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setContents:(id)contents {
     %orig;
 
-    if (!objc_getAssociatedObject(self, &RKBlackManagedLayerKey) ||
+    if (!RKKeyboardSessionActive() ||
+        !objc_getAssociatedObject(self, &RKBlackManagedLayerKey) ||
         objc_getAssociatedObject(self, &RKBlackUpdatingImageKey)) return;
     if (NSThread.isMainThread) RKUpdateBlackActionImage((CALayer *)self, RKBlackEnabled());
     else {
@@ -1388,7 +1409,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)setBackgroundColor:(CGColorRef)color {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKBlackManagedLayerKey) &&
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKBlackManagedLayerKey) &&
         !objc_getAssociatedObject(self, &RKBlackUpdatingColorKey) && NSThread.isMainThread)
         RKUpdateBlackLayerColor((CALayer *)self, RKBlackEnabled(), NO);
 }
@@ -1543,12 +1564,14 @@ void RKApplyBlackKeyboardHost(UIView *host) {
     }
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKNativeBackgroundLayerKey)) RKUpdateNativeMultiply((CALayer *)self);
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKNativeBackgroundLayerKey))
+        RKUpdateNativeMultiply((CALayer *)self);
 }
 - (void)setContents:(id)contents {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKNativeBackgroundLayerKey)) RKUpdateNativeMultiply((CALayer *)self);
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKNativeBackgroundLayerKey))
+        RKUpdateNativeMultiply((CALayer *)self);
 }
 %end
 %end
@@ -1658,29 +1681,38 @@ void RKApplyBlackKeyboardHost(UIView *host) {
             @{@"source":filter ?: NSNull.null}, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKNativeKeyOwnerKey)) RKUpdateNativeCompositing((CALayer *)self);
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKNativeKeyOwnerKey))
+        RKUpdateNativeCompositing((CALayer *)self);
 }
 - (void)setBounds:(CGRect)bounds {
     %orig;
 
-    if (objc_getAssociatedObject(self, &RKNativeKeyOwnerKey)) RKUpdateNativeCompositing((CALayer *)self);
+    if (RKKeyboardSessionActive() && objc_getAssociatedObject(self, &RKNativeKeyOwnerKey))
+        RKUpdateNativeCompositing((CALayer *)self);
 }
-- (void)addSublayer:(CALayer *)layer { %orig;
- RKPrepareNativeAttachedLayer(layer); }
-- (void)insertSublayer:(CALayer *)layer atIndex:(unsigned int)index { %orig;
- RKPrepareNativeAttachedLayer(layer); }
-- (void)insertSublayer:(CALayer *)layer below:(CALayer *)sibling { %orig;
- RKPrepareNativeAttachedLayer(layer); }
-- (void)insertSublayer:(CALayer *)layer above:(CALayer *)sibling { %orig;
- RKPrepareNativeAttachedLayer(layer); }
-- (void)replaceSublayer:(CALayer *)oldLayer with:(CALayer *)newLayer { %orig;
- RKPrepareNativeAttachedLayer(newLayer); }
+- (void)addSublayer:(CALayer *)layer {
+    %orig;
+ if (RKKeyboardSessionActive()) RKPrepareNativeAttachedLayer(layer); }
+- (void)insertSublayer:(CALayer *)layer atIndex:(unsigned int)index {
+    %orig;
+ if (RKKeyboardSessionActive()) RKPrepareNativeAttachedLayer(layer); }
+- (void)insertSublayer:(CALayer *)layer below:(CALayer *)sibling {
+    %orig;
+ if (RKKeyboardSessionActive()) RKPrepareNativeAttachedLayer(layer); }
+- (void)insertSublayer:(CALayer *)layer above:(CALayer *)sibling {
+    %orig;
+ if (RKKeyboardSessionActive()) RKPrepareNativeAttachedLayer(layer); }
+- (void)replaceSublayer:(CALayer *)oldLayer with:(CALayer *)newLayer {
+    %orig;
+ if (RKKeyboardSessionActive()) RKPrepareNativeAttachedLayer(newLayer); }
 - (void)setSublayers:(NSArray *)layers {
     %orig;
 
+    if (!RKKeyboardSessionActive()) return;
     for (CALayer *layer in layers) RKPrepareNativeAttachedLayer(layer);
 }
 - (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key {
+    if (!RKKeyboardSessionActive()) { %orig(animation, key); return; }
     CAAnimation *filtered = RKNativeBlendAnimation((CALayer *)self, animation);
     if (filtered) %orig(filtered, key);
 }

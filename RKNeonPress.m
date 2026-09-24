@@ -42,7 +42,9 @@ static UIImage *RKCachedPressForeground(UIView *overlay, UIView *keyView, CGRect
     if (cached) return cached;
     UIImage *image = RKPressForegroundUncached(overlay, keyView, face);
     if (image) {
-        if (entries.count >= 4) [entries removeAllObjects];
+        // P1-6: 4 条缓存在上档/符号切换时过早整体失效，导致反复整键快照+像素扫描；
+        // 放宽到 8 条减少重复快照，命中结果与原来完全一致。
+        if (entries.count >= 8) [entries removeAllObjects];
         entries[cacheKey] = image;
     }
     return image;
@@ -68,9 +70,9 @@ static UIView *RKPressKeyView(UIView *node, UIView *host, CGRect frame, NSUInteg
     if (depth > 12) return nil;
     for (UIView *view in node.subviews) {
         if (view.hidden || view.alpha < .01 || RKKeyboardExcludedView(view)) continue;
-        NSString *name = NSStringFromClass(view.class).lowercaseString;
-        BOOL key = [view isKindOfClass:UIButton.class] || [name containsString:@"keyview"] ||
-            [name containsString:@"keycap"] || [name containsString:@"keybutton"];
+        NSUInteger features = RKClassNameFeatures(view.class);
+        BOOL key = [view isKindOfClass:UIButton.class] ||
+            (features & (RKFeatureKeyview | RKFeatureKeycap | RKFeatureKeybutton)) != 0;
         CGRect candidate = [view convertRect:view.bounds toView:host];
         BOOL matches = fabs(candidate.origin.x - frame.origin.x) <= 3 &&
             fabs(candidate.origin.y - frame.origin.y) <= 3 &&

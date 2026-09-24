@@ -5,6 +5,7 @@
 #import <os/lock.h>
 #import "RKPreferences.h"
 #import "RKAdaptivePerformance.h"
+#import "RKKeyboardGeometry.h"
 
 static NSDictionary *RKCandidatePrefs;
 static CGGradientRef RKCandidateCachedGradient;
@@ -107,19 +108,14 @@ static NSDictionary *RKCandidateReadPreferences(void) {
 
 static BOOL RKCandidateRegion(UIView *view) {
     for (UIView *p = view; p; p = p.superview) {
-        NSString *name = NSStringFromClass(p.class).lowercaseString;
-        if ([name containsString:@"candidate"] || [name containsString:@"prediction"] || [name containsString:@"suggestion"]) return YES;
+        if ((RKClassNameFeatures(p.class) & RKFeatureCandidateArea) != 0) return YES;
         if ([p isKindOfClass:UIWindow.class]) break;
     }
     return NO;
 }
 static BOOL RKNativeCandidateRegion(UIView *view) {
     for (UIView *parent = view; parent; parent = parent.superview) {
-        NSString *name = NSStringFromClass(parent.class);
-        if (([name hasPrefix:@"UIKB"] && [name containsString:@"Candidate"]) ||
-            [name hasPrefix:@"UIKeyboardCandidate"] || [name hasPrefix:@"TUICandidate"] ||
-            [name hasPrefix:@"TUIInlineCandidate"] || [name hasPrefix:@"TUIPrediction"] ||
-            [name hasPrefix:@"UIKeyboardPrediction"] || [name hasPrefix:@"_UIKeyboardCandidate"]) return YES;
+        if ((RKClassNameFeatures(parent.class) & RKFeatureCandidateUI) != 0) return YES;
         if ([parent isKindOfClass:UIWindow.class]) break;
     }
     return NO;
@@ -378,6 +374,7 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook UILabel
 - (void)drawTextInRect:(CGRect)rect {
+    if (!RKKeyboardSessionActive()) { %orig; return; }
     RKDrawCandidate(self, rect, YES, ^{ 
         %orig;
  });
@@ -387,6 +384,7 @@ static void RKWriteNativeDiagnostic(void) {
 // Scope custom string drawing to native candidate views. Never tint their backgrounds.
 %hook UIView
 - (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)context {
+    if (!RKKeyboardSessionActive()) { %orig(layer, context); return; }
     BOOL candidate = RKNativeCandidateRegion(self);
     if (!candidate) { 
         %orig;
@@ -407,7 +405,7 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook NSString
 - (void)drawInRect:(CGRect)rect withAttributes:(NSDictionary *)attributes {
-    if (!RKNativeTextDrawingEnabled()) { 
+    if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
     CGSize size = [(NSString *)self boundingRectWithSize:rect.size options:NSStringDrawingUsesLineFragmentOrigin
@@ -417,7 +415,7 @@ static void RKWriteNativeDiagnostic(void) {
  });
 }
 - (void)drawAtPoint:(CGPoint)point withAttributes:(NSDictionary *)attributes {
-    if (!RKNativeTextDrawingEnabled()) { 
+    if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
     CGRect rect = {point, [(NSString *)self sizeWithAttributes:attributes]};
@@ -426,7 +424,7 @@ static void RKWriteNativeDiagnostic(void) {
  });
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options attributes:(NSDictionary *)attributes context:(NSStringDrawingContext *)context {
-    if (!RKNativeTextDrawingEnabled()) { 
+    if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
     CGSize size = [(NSString *)self boundingRectWithSize:rect.size options:options attributes:attributes context:context].size;
@@ -438,7 +436,7 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook NSAttributedString
 - (void)drawInRect:(CGRect)rect {
-    if (!RKNativeTextDrawingEnabled()) { 
+    if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
     CGSize size = [(NSAttributedString *)self boundingRectWithSize:rect.size
@@ -448,7 +446,7 @@ static void RKWriteNativeDiagnostic(void) {
  });
 }
 - (void)drawAtPoint:(CGPoint)point {
-    if (!RKNativeTextDrawingEnabled()) { 
+    if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
     CGRect rect = {point, [(NSAttributedString *)self size]};
@@ -457,7 +455,7 @@ static void RKWriteNativeDiagnostic(void) {
  });
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options context:(NSStringDrawingContext *)context {
-    if (!RKNativeTextDrawingEnabled()) { 
+    if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
     CGSize size = [(NSAttributedString *)self boundingRectWithSize:rect.size options:options context:context].size;

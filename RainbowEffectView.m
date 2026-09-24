@@ -18,6 +18,15 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         if (view) [view reloadConfiguration];
     });
 }
+// P1-3: 每个键位的波纹几何（frame/路径）只依赖键位矩形与 rimWidth 两档，
+// 预构建后每次按键直接复用，避免逐键重建 path 与坐标变换。
+@interface RKKeyWaveGeometry : NSObject
+@property(nonatomic) CGRect edgeFrame;
+@property(nonatomic, strong) UIBezierPath *outline; // 已平移到 edgeFrame 坐标系
+@property(nonatomic, strong) UIBezierPath *outer;   // 圆角外框 ∪ outline（EvenOdd 环带）
+@end
+@implementation RKKeyWaveGeometry
+@end
 @interface RainbowEffectView ()
 @property(nonatomic,strong) NSDictionary *config;
 @property(nonatomic) CGFloat hue;
@@ -27,6 +36,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 @property(nonatomic,strong) UIBezierPath *cachedGutterPath;
 @property(nonatomic,strong) NSArray<UIBezierPath *> *cachedFacePaths;
 @property(nonatomic,strong) NSArray<NSValue *> *cachedCenters;
+@property(nonatomic,strong) NSArray<RKKeyWaveGeometry *> *cachedWaveGeometries;
 @property(nonatomic) CGRect cachedGeometryBounds;
 @end
 @implementation RainbowEffectView
@@ -111,13 +121,32 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     _keyFrames = [keyFrames copy];
     NSMutableArray *faces = [NSMutableArray arrayWithCapacity:_keyFrames.count];
     NSMutableArray *centers = [NSMutableArray arrayWithCapacity:_keyFrames.count];
+    NSMutableArray *geometries = [NSMutableArray arrayWithCapacity:_keyFrames.count * 2];
     for (NSValue *value in _keyFrames) {
         CGRect rect = value.CGRectValue;
         [faces addObject:RKKeyboardKeyFacePath(rect)];
         [centers addObject:[NSValue valueWithCGPoint:CGPointMake(CGRectGetMidX(rect), CGRectGetMidY(rect))]];
+        UIBezierPath *facePath = RKKeyboardKeyFacePath(rect);
+        CGRect face = facePath.bounds;
+        // 两档 rimWidth：普通 2.6（偶数下标）、按压 3.0（奇数下标）。
+        for (NSUInteger i = 0; i < 2; i++) {
+            CGFloat rim = i == 1 ? 3.0 : 2.6;
+            RKKeyWaveGeometry *geometry = [RKKeyWaveGeometry new];
+            CGRect edgeFrame = CGRectInset(face, -rim, -rim);
+            UIBezierPath *outline = [facePath copy];
+            [outline applyTransform:CGAffineTransformMakeTranslation(-edgeFrame.origin.x, -edgeFrame.origin.y)];
+            CGFloat corner = MIN(5, MIN(face.size.width, face.size.height) * .16);
+            UIBezierPath *outer = [UIBezierPath bezierPathWithRoundedRect:edgeFrame cornerRadius:corner + rim];
+            [outer appendPath:outline];
+            geometry.edgeFrame = edgeFrame;
+            geometry.outline = outline;
+            geometry.outer = outer;
+            [geometries addObject:geometry];
+        }
     }
     self.cachedFacePaths = faces;
     self.cachedCenters = centers;
+    self.cachedWaveGeometries = geometries;
     self.cachedGutterPath = nil;
     self.cachedGeometryBounds = CGRectNull;
     for (CALayer *pulse in self.layer.sublayers.copy) [pulse removeFromSuperlayer];
@@ -218,23 +247,18 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         UIColor *first = [UIColor colorWithHue:keyHue saturation:[self neonSaturation:.78] brightness:brightness alpha:1];
         UIColor *last = [UIColor colorWithHue:mode == 1 ? hue : fmod(keyHue + .12, 1)
                                  saturation:[self neonSaturation:.9] brightness:brightness alpha:1];
-        UIBezierPath *outline = [self.cachedFacePaths[index] copy];
-        CGRect face = outline.bounds;
         CGFloat rimWidth = touched ? 3.0 : 2.6;
-        CGRect edgeFrame = CGRectInset(face, -rimWidth, -rimWidth);
-        [outline applyTransform:CGAffineTransformMakeTranslation(-edgeFrame.origin.x, -edgeFrame.origin.y)];
+        // P1-3: 使用预构建的几何模板，省去每次按键的路径复制/坐标变换/圆角路径构建。
+        RKKeyWaveGeometry *geometry = self.cachedWaveGeometries[index * 2 + (touched ? 1 : 0)];
         CALayer *key = [CALayer layer];
         key.name = @"keyWave";
-        key.frame = edgeFrame;
+        key.frame = geometry.edgeFrame;
         key.opacity = 0;
         [pulse addSublayer:key];
 
-        CGFloat corner = MIN(5, MIN(face.size.width, face.size.height) * .16);
-        UIBezierPath *outer = [UIBezierPath bezierPathWithRoundedRect:key.bounds cornerRadius:corner + rimWidth];
-        [outer appendPath:outline];
         CAShapeLayer *halo = [CAShapeLayer layer];
         halo.frame = key.bounds;
-        halo.path = outline.CGPath;
+        halo.path = geometry.outline.CGPath;
         halo.fillColor = [self preservesBlackFaces] ? UIColor.clearColor.CGColor :
             [first colorWithAlphaComponent:touched ? core * .45 : strength * .12].CGColor;
         halo.strokeColor = [first colorWithAlphaComponent:.7].CGColor;
@@ -243,6 +267,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         halo.shadowOffset = CGSizeZero;
         halo.shadowRadius = softness * .6;
         halo.shadowOpacity = .8;
+        // P1-4: 显式 shadowPath，省掉 CA 每帧自动计算阴影形状，像素结果一致。
+        halo.shadowPath = geometry.outline.CGPath;
         [key addSublayer:halo];
 
         CAGradientLayer *edge = [CAGradientLayer layer];
@@ -254,7 +280,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         rim.frame = key.bounds;
         // A filled outer ring keeps its full visible width after the black-face
         // exclusion mask; a centered stroke would lose its inner half.
-        rim.path = outer.CGPath;
+        rim.path = geometry.outer.CGPath;
         rim.fillRule = kCAFillRuleEvenOdd;
         rim.fillColor = UIColor.whiteColor.CGColor;
         edge.mask = rim;
@@ -439,6 +465,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(point.x-3,point.y-3,6,6)];
     UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(point.x-radius,point.y-radius,2*radius,2*radius)];
     ring.path = end.CGPath;
+    // P1-4: 显式 shadowPath，省掉每帧阴影形状自动计算。
+    ring.shadowPath = end.CGPath;
     rainbow.mask = ring;
     CABasicAnimation *expand = [CABasicAnimation animationWithKeyPath:@"path"];
     expand.fromValue = (__bridge id)start.CGPath;
@@ -455,6 +483,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     flash.shadowRadius = softness;
     flash.shadowOpacity = .8;
     flash.shadowOffset = CGSizeZero;
+    // P1-4: 圆角矩形阴影显式 shadowPath。
+    flash.shadowPath = [UIBezierPath bezierPathWithRoundedRect:flash.bounds cornerRadius:9].CGPath;
     flash.opacity = 0;
     [pulse addSublayer:flash];
     CABasicAnimation *flashFade = [CABasicAnimation animationWithKeyPath:@"opacity"];

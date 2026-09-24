@@ -8,7 +8,6 @@
 static char RKOverlayKey;
 static char RKOverlayBoundsKey;
 static char RKPendingPressKey;
-static char RKGeometryTimeKey;
 @interface RKPendingPress : NSObject
 @property(nonatomic) CGPoint point;
 @property(nonatomic) CFTimeInterval time, lastRendered;
@@ -30,6 +29,7 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
 %hook UIApplication
 - (void)sendEvent:(UIEvent *)event {
     %orig;
+    if (!RKKeyboardSessionActive()) return;
     if (event.type != UIEventTypeTouches) return;
     for (UITouch *touch in event.allTouches) {
         if (touch.phase != UITouchPhaseBegan) continue;
@@ -72,12 +72,10 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
             BOOL geometryChanged = !oldBoundsValue ||
                 !CGRectEqualToRect(oldBoundsValue.CGRectValue, liveHost.bounds);
 
-            // Revalidate equal-sized layout changes at most every 200 ms.
-            // Bounds changes and missing geometry still refresh immediately.
-            CFTimeInterval lastScan = [objc_getAssociatedObject(liveHost, &RKGeometryTimeKey) doubleValue];
-            BOOL scan = geometryChanged || !effect.keyFrames.count || now - lastScan >= .2;
+            // 布局未变时复用缓存键位，打字过程中不再定时全量扫描（P1-1）。
+            // keyplane/keys 指针与 bounds 任一变化都会触发重扫，覆盖键盘切换/旋转。
+            BOOL scan = geometryChanged || !effect.keyFrames.count || RKKeyboardLayoutChanged(liveHost);
             NSArray<NSValue *> *liveKeyFrames = scan ? RKKeyboardKeyFrames(liveHost) : effect.keyFrames;
-            if (scan) objc_setAssociatedObject(liveHost, &RKGeometryTimeKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             BOOL keyGeometryChanged = ![effect.keyFrames isEqualToArray:liveKeyFrames];
             if (geometryChanged || keyGeometryChanged) {
                 effect.frame = liveHost.bounds;
