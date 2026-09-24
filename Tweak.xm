@@ -26,33 +26,41 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
         if (!host || !host.window) continue;
         CGPoint point = [touch locationInView:host];
         if (!CGRectContainsPoint(host.bounds, point)) continue;
-        RainbowEffectView *effect = objc_getAssociatedObject(host, &RKOverlayKey);
-        if (!effect) {
-            effect = [[RainbowEffectView alloc] initWithFrame:host.bounds];
-            objc_setAssociatedObject(host, &RKOverlayKey, effect, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            [host addSubview:effect];
-            dispatch_async(dispatch_get_main_queue(), ^{
-                if (host.window) RKApplyBlackKeyboardHost(host);
-            });
-        }
-        BOOL geometryChanged = ![objc_getAssociatedObject(host, &RKOverlayBoundsKey)
-            CGRectValue].size.width ||
-            !CGRectEqualToRect([objc_getAssociatedObject(host, &RKOverlayBoundsKey) CGRectValue], host.bounds);
-        if (geometryChanged) {
-            effect.frame = host.bounds;
-            [host bringSubviewToFront:effect];
-            UIBezierPath *visible = [UIBezierPath bezierPathWithRect:effect.bounds];
-            RKCollectExclusions(host, host, visible, 0);
-            CAShapeLayer *mask = [CAShapeLayer layer];
-            mask.frame = effect.bounds;
-            mask.path = visible.CGPath;
-            mask.fillRule = kCAFillRuleEvenOdd;
-            effect.layer.mask = mask;
-            effect.keyFrames = RKKeyboardKeyFrames(host);
-            objc_setAssociatedObject(host, &RKOverlayBoundsKey,
-                [NSValue valueWithCGRect:host.bounds], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        }
-        [effect showRippleAtPoint:[touch locationInView:effect] sourceView:touch.view];
+        CGPoint touchPoint = point;
+        __weak UIView *weakHost = host;
+        __weak UIView *weakSourceView = touch.view;
+        // Let UIKit finish delivering the touch before building the visual effect.
+        // The input event is therefore not held behind path/layer construction.
+        dispatch_async(dispatch_get_main_queue(), ^{
+            UIView *liveHost = weakHost;
+            if (!liveHost || !liveHost.window) return;
+            RainbowEffectView *effect = objc_getAssociatedObject(liveHost, &RKOverlayKey);
+            if (!effect) {
+                effect = [[RainbowEffectView alloc] initWithFrame:liveHost.bounds];
+                objc_setAssociatedObject(liveHost, &RKOverlayKey, effect, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+                [liveHost addSubview:effect];
+                RKApplyBlackKeyboardHost(liveHost);
+            }
+            NSValue *oldBoundsValue = objc_getAssociatedObject(liveHost, &RKOverlayBoundsKey);
+            BOOL geometryChanged = !oldBoundsValue ||
+                !CGRectEqualToRect(oldBoundsValue.CGRectValue, liveHost.bounds);
+            if (geometryChanged) {
+                effect.frame = liveHost.bounds;
+                [liveHost bringSubviewToFront:effect];
+                UIBezierPath *visible = [UIBezierPath bezierPathWithRect:effect.bounds];
+                RKCollectExclusions(liveHost, liveHost, visible, 0);
+                CAShapeLayer *mask = [CAShapeLayer layer];
+                mask.frame = effect.bounds;
+                mask.path = visible.CGPath;
+                mask.fillRule = kCAFillRuleEvenOdd;
+                effect.layer.mask = mask;
+                effect.keyFrames = RKKeyboardKeyFrames(liveHost);
+                objc_setAssociatedObject(liveHost, &RKOverlayBoundsKey,
+                    [NSValue valueWithCGRect:liveHost.bounds], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+            CGPoint effectPoint = [liveHost convertPoint:touchPoint toView:effect];
+            [effect showRippleAtPoint:effectPoint sourceView:weakSourceView];
+        });
     }
 }
 %end

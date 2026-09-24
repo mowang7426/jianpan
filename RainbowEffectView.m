@@ -7,11 +7,24 @@
 static NSDictionary *RKReadPreferences(void) {
     return RKReadEffectivePreferences();
 }
+
+@class RainbowEffectView;
+static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *observer,
+                                       CFStringRef name, const void *object, CFDictionaryRef userInfo) {
+    RainbowEffectView *view = (__bridge RainbowEffectView *)observer;
+    dispatch_async(dispatch_get_main_queue(), ^{
+        if (view) [view reloadConfiguration];
+    });
+}
 @interface RainbowEffectView ()
 @property(nonatomic,strong) NSDictionary *config;
 @property(nonatomic) CGFloat hue;
 @property(nonatomic) CGFloat pressHue;
 @property(nonatomic) NSInteger lastStyle;
+@property(nonatomic,strong) UIBezierPath *cachedGutterPath;
+@property(nonatomic,strong) NSArray<UIBezierPath *> *cachedFacePaths;
+@property(nonatomic,strong) NSArray<NSValue *> *cachedCenters;
+@property(nonatomic) CGRect cachedGeometryBounds;
 @end
 @implementation RainbowEffectView
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -21,12 +34,23 @@ static NSDictionary *RKReadPreferences(void) {
         self.clipsToBounds = YES;
         self.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
         [[NSNotificationCenter defaultCenter] addObserver:self selector:@selector(reloadConfiguration) name:UIApplicationDidBecomeActiveNotification object:nil];
+        CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self),
+            RKEffectPreferencesChanged, CFSTR("com.minis.rainbowkeyboard.changed"), NULL,
+            CFNotificationSuspensionBehaviorDeliverImmediately);
         [self reloadConfiguration];
     }
     return self;
 }
-- (void)dealloc { [[NSNotificationCenter defaultCenter] removeObserver:self]; }
-- (void)reloadConfiguration { self.config = RKReadPreferences(); }
+- (void)dealloc {
+    [[NSNotificationCenter defaultCenter] removeObserver:self];
+    CFNotificationCenterRemoveObserver(CFNotificationCenterGetDarwinNotifyCenter(), (__bridge const void *)(self),
+        CFSTR("com.minis.rainbowkeyboard.changed"), NULL);
+}
+- (void)reloadConfiguration {
+    NSDictionary *newConfig = RKReadPreferences();
+    if (!newConfig) newConfig = @{};
+    self.config = newConfig;
+}
 - (CGFloat)number:(NSString *)key fallback:(CGFloat)fallback low:(CGFloat)low high:(CGFloat)high {
     id x = self.config[key];
     CGFloat v = [x respondsToSelector:@selector(doubleValue)] ? [x doubleValue] : fallback;
@@ -40,16 +64,24 @@ static NSDictionary *RKReadPreferences(void) {
     return [self flag:@"PureBlackKeyboard"];
 }
 - (CAShapeLayer *)keyGutterMask {
-    UIBezierPath *gaps = [UIBezierPath bezierPathWithRect:self.bounds];
-    for (NSValue *value in self.keyFrames) [gaps appendPath:RKKeyboardKeyFacePath(value.CGRectValue)];
+    if (!self.cachedGutterPath || !CGRectEqualToRect(self.cachedGeometryBounds, self.bounds)) {
+        UIBezierPath *gaps = [UIBezierPath bezierPathWithRect:self.bounds];
+        for (UIBezierPath *face in self.cachedFacePaths) [gaps appendPath:face];
+        self.cachedGutterPath = gaps;
+        self.cachedGeometryBounds = self.bounds;
+    }
     CAShapeLayer *mask = [CAShapeLayer layer];
     mask.frame = self.bounds;
-    mask.path = gaps.CGPath;
+    mask.path = self.cachedGutterPath.CGPath;
     mask.fillRule = kCAFillRuleEvenOdd;
     return mask;
 }
 - (void)layoutSubviews {
     [super layoutSubviews];
+    if (!CGRectEqualToRect(self.cachedGeometryBounds, self.bounds)) {
+        self.cachedGutterPath = nil;
+        self.cachedGeometryBounds = CGRectNull;
+    }
     // Old animations must not float over a new keyboard after rotation/resizing.
     for (CALayer *pulse in self.layer.sublayers.copy) {
         if (!CGRectEqualToRect(pulse.frame, self.bounds)) [pulse removeFromSuperlayer];
@@ -62,6 +94,17 @@ static NSDictionary *RKReadPreferences(void) {
 - (void)setKeyFrames:(NSArray<NSValue *> *)keyFrames {
     if ([_keyFrames isEqualToArray:keyFrames]) return;
     _keyFrames = [keyFrames copy];
+    NSMutableArray *faces = [NSMutableArray arrayWithCapacity:_keyFrames.count];
+    NSMutableArray *centers = [NSMutableArray arrayWithCapacity:_keyFrames.count];
+    for (NSValue *value in _keyFrames) {
+        CGRect rect = value.CGRectValue;
+        [faces addObject:RKKeyboardKeyFacePath(rect)];
+        [centers addObject:[NSValue valueWithCGPoint:CGPointMake(CGRectGetMidX(rect), CGRectGetMidY(rect))]];
+    }
+    self.cachedFacePaths = faces;
+    self.cachedCenters = centers;
+    self.cachedGutterPath = nil;
+    self.cachedGeometryBounds = CGRectNull;
     for (CALayer *pulse in self.layer.sublayers.copy) [pulse removeFromSuperlayer];
 }
 - (void)addAmbientGlowToPulse:(CALayer *)pulse origin:(CGPoint)origin radius:(CGFloat)radius
@@ -148,17 +191,19 @@ static NSDictionary *RKReadPreferences(void) {
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     CGFloat tail = duration * (.45 + band);
     [self addAmbientGlowToPulse:pulse origin:origin radius:reach hue:hue mode:mode duration:travel + tail];
-    for (NSValue *value in self.keyFrames) {
+    for (NSUInteger index = 0; index < self.keyFrames.count; index++) {
+        NSValue *value = self.keyFrames[index];
         CGRect rect = value.CGRectValue;
         BOOL touched = CGRectEqualToRect(rect, pressed);
-        CGFloat distance = hypot(CGRectGetMidX(rect) - origin.x, CGRectGetMidY(rect) - origin.y);
+        CGPoint center = [self.cachedCenters[index] CGPointValue];
+        CGFloat distance = hypot(center.x - origin.x, center.y - origin.y);
         if ((!propagate && !touched) || distance > reach) continue;
         CGFloat progress = MIN(1, distance / reach);
         CGFloat keyHue = mode == 1 ? hue : fmod(hue + progress * .24, 1);
         UIColor *first = [UIColor colorWithHue:keyHue saturation:[self neonSaturation:.78] brightness:brightness alpha:1];
         UIColor *last = [UIColor colorWithHue:mode == 1 ? hue : fmod(keyHue + .12, 1)
                                  saturation:[self neonSaturation:.9] brightness:brightness alpha:1];
-        UIBezierPath *outline = RKKeyboardKeyFacePath(rect);
+        UIBezierPath *outline = [self.cachedFacePaths[index] copy];
         CGRect face = outline.bounds;
         CGFloat rimWidth = touched ? 3.0 : 2.6;
         CGRect edgeFrame = CGRectInset(face, -rimWidth, -rimWidth);
@@ -215,7 +260,8 @@ static NSDictionary *RKReadPreferences(void) {
     [self showRippleAtPoint:point sourceView:nil];
 }
 - (void)showRippleAtPoint:(CGPoint)point sourceView:(UIView *)sourceView {
-    [self reloadConfiguration];
+    // Configuration is cached and invalidated by the settings Darwin notification.
+    // Do not perform preference/transport checks on every key press.
     NSString *bid = NSBundle.mainBundle.bundleIdentifier.lowercaseString ?: @"";
     BOOL weType = [bid containsString:@"wetype"];
     if (![self flag:@"Enabled"] || ![self flag:@"RippleEnabled"] || ![self flag:weType ? @"WeChatKeyboard" : @"NativeKeyboard"]) {

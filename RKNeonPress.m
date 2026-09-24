@@ -6,6 +6,48 @@
 static NSString *const RKPressScale = @"rkNeonPressScale";
 static NSString *const RKPressLift = @"rkNeonPressLift";
 
+// Glyph extraction is relatively expensive (view hierarchy render + pixel pass).
+// Keyboard key views are reused for many presses, so keep a small weak-key cache.
+static UIImage *RKPressForegroundUncached(UIView *overlay, UIView *keyView, CGRect face);
+
+static NSMapTable<UIView *, NSMutableDictionary<NSString *, UIImage *> *> *RKNeonForegroundCache(void) {
+    static NSMapTable *cache;
+    static dispatch_once_t once;
+    dispatch_once(&once, ^{
+        cache = [NSMapTable weakToStrongObjectsMapTable];
+    });
+    return cache;
+}
+
+static NSString *RKNeonForegroundCacheKey(UIView *keyView, CGRect face) {
+    NSString *label = keyView.accessibilityLabel ?: @"";
+    if ([keyView isKindOfClass:UIButton.class]) {
+        NSString *title = [(UIButton *)keyView currentTitle];
+        if (title.length) label = [label stringByAppendingFormat:@"|%@", title];
+    }
+    return [NSString stringWithFormat:@"%@|%.2f,%.2f,%.2f,%.2f", label,
+            face.origin.x, face.origin.y, face.size.width, face.size.height];
+}
+
+static UIImage *RKCachedPressForeground(UIView *overlay, UIView *keyView, CGRect face) {
+    if (!keyView) return nil;
+    NSMapTable *cache = RKNeonForegroundCache();
+    NSMutableDictionary *entries = [cache objectForKey:keyView];
+    if (!entries) {
+        entries = [NSMutableDictionary dictionary];
+        [cache setObject:entries forKey:keyView];
+    }
+    NSString *cacheKey = RKNeonForegroundCacheKey(keyView, face);
+    UIImage *cached = entries[cacheKey];
+    if (cached) return cached;
+    UIImage *image = RKPressForegroundUncached(overlay, keyView, face);
+    if (image) {
+        if (entries.count >= 4) [entries removeAllObjects];
+        entries[cacheKey] = image;
+    }
+    return image;
+}
+
 @interface RKNeonPressLayer : CALayer
 @property(nonatomic) CGRect keyFrame;
 @property(nonatomic, weak) CALayer *animatedKey;
@@ -53,7 +95,7 @@ static CASpringAnimation *RKPressSpring(NSString *keyPath, CGFloat start, CGFloa
     return spring;
 }
 
-static UIImage *RKPressForeground(UIView *overlay, UIView *keyView, CGRect face) {
+static UIImage *RKPressForegroundUncached(UIView *overlay, UIView *keyView, CGRect face) {
     UIView *host = overlay.superview;
     if (!host.window) return nil;
     CGRect crop = [overlay convertRect:face toView:host];
@@ -159,7 +201,7 @@ void RKShowNeonKeyPress(UIView *overlay, CGRect keyFrame, UIColor *color, CGFloa
         if (!matches) key = nil;
     }
     if (!key) key = host ? RKPressKeyView(host, host, hostFrame, 0) : nil;
-    UIImage *foreground = RKPressForeground(overlay, key, face);
+    UIImage *foreground = RKCachedPressForeground(overlay, key, face);
     RKNeonPressLayer *pulse = [RKNeonPressLayer layer];
     pulse.name = @"neonKeyPress";
     pulse.frame = overlay.bounds;
