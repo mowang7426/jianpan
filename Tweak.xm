@@ -6,6 +6,16 @@
 #import "RKBlackKeyboard.h"
 static char RKOverlayKey;
 static char RKOverlayBoundsKey;
+static char RKPendingPressKey;
+static char RKGeometryTimeKey;
+@interface RKPendingPress : NSObject
+@property(nonatomic) CGPoint point;
+@property(nonatomic) CFTimeInterval time;
+@property(nonatomic, weak) UIView *source;
+@property(nonatomic) BOOL queued;
+@end
+@implementation RKPendingPress
+@end
 static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, NSUInteger depth) {
     if (depth > 8) return;
     for (UIView *v in node.subviews) {
@@ -26,14 +36,27 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
         if (!host || !host.window) continue;
         CGPoint point = [touch locationInView:host];
         if (!CGRectContainsPoint(host.bounds, point)) continue;
-        CGPoint touchPoint = point;
+        RKPendingPress *pending = objc_getAssociatedObject(host, &RKPendingPressKey);
+        if (!pending) {
+            pending = [RKPendingPress new];
+            objc_setAssociatedObject(host, &RKPendingPressKey, pending, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+        }
+        pending.point = point;
+        pending.time = CACurrentMediaTime();
+        pending.source = touch.view;
+        // Coalesce decoration only. Every original input event was already delivered.
+        if (pending.queued) continue;
+        pending.queued = YES;
         __weak UIView *weakHost = host;
-        __weak UIView *weakSourceView = touch.view;
         // Let UIKit finish delivering the touch before building the visual effect.
         // The input event is therefore not held behind path/layer construction.
         dispatch_async(dispatch_get_main_queue(), ^{
+            pending.queued = NO;
             UIView *liveHost = weakHost;
-            if (!liveHost || !liveHost.window) return;
+            CFTimeInterval now = CACurrentMediaTime();
+            if (!liveHost || !liveHost.window || liveHost.hidden || now - pending.time > .080) return;
+            CGPoint touchPoint = pending.point;
+            UIView *sourceView = pending.source;
             RainbowEffectView *effect = objc_getAssociatedObject(liveHost, &RKOverlayKey);
             if (!effect) {
                 effect = [[RainbowEffectView alloc] initWithFrame:liveHost.bounds];
@@ -45,14 +68,12 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
             BOOL geometryChanged = !oldBoundsValue ||
                 !CGRectEqualToRect(oldBoundsValue.CGRectValue, liveHost.bounds);
 
-            // Keyboard layouts can change (9-key <-> 26-key, alphabetic <->
-            // numeric, etc.) without changing the host bounds. The old code
-            // only refreshed keyFrames when bounds changed, so a 26-key layout
-            // could keep the previous 9-key geometry and render the old two-key
-            // block/ripple shape. Refresh the key geometry whenever the live
-            // key-frame set differs, while keeping the expensive exclusion mask
-            // tied to bounds changes.
-            NSArray<NSValue *> *liveKeyFrames = RKKeyboardKeyFrames(liveHost);
+            // Revalidate equal-sized layout changes at most every 200 ms.
+            // Bounds changes and missing geometry still refresh immediately.
+            CFTimeInterval lastScan = [objc_getAssociatedObject(liveHost, &RKGeometryTimeKey) doubleValue];
+            BOOL scan = geometryChanged || !effect.keyFrames.count || now - lastScan >= .2;
+            NSArray<NSValue *> *liveKeyFrames = scan ? RKKeyboardKeyFrames(liveHost) : effect.keyFrames;
+            if (scan) objc_setAssociatedObject(liveHost, &RKGeometryTimeKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             BOOL keyGeometryChanged = ![effect.keyFrames isEqualToArray:liveKeyFrames];
             if (geometryChanged || keyGeometryChanged) {
                 effect.frame = liveHost.bounds;
@@ -71,7 +92,8 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
                     [NSValue valueWithCGRect:liveHost.bounds], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             }
             CGPoint effectPoint = [liveHost convertPoint:touchPoint toView:effect];
-            [effect showRippleAtPoint:effectPoint sourceView:weakSourceView];
+            if (CACurrentMediaTime() - pending.time > .080) return;
+            [effect showRippleAtPoint:effectPoint sourceView:sourceView];
         });
     }
 }

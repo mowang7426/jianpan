@@ -39,7 +39,7 @@
 }
 - (void)tick:(CADisplayLink *)link {
     CFTimeInterval now = CACurrentMediaTime();
-    if (!self.enabled || now - self.lastInput > 1.5) { [self stop]; return; }
+    if (!self.enabled || now - self.lastInput > 6.0) { [self stop]; return; }
     if (!self.previous) { self.previous = self.windowStart = now; return; }
     CFTimeInterval gap = now - self.previous;
     self.previous = now;
@@ -71,7 +71,9 @@ void RKAdaptiveNoteInput(void) {
     RKAdaptiveMonitor *m = [RKAdaptiveMonitor shared];
     if (!m.enabled) return;
     CFTimeInterval now = CACurrentMediaTime();
-    if (now - m.lastInput > 5.0) { [m stop]; m.level = 0; }
+    // Retain the reduced level within this keyboard session. Recovery requires
+    // stable samples, keyboard dismissal, backgrounding, or disabling the feature.
+    if (!m.link) [m stop];
     m.lastInput = now;
     if (!m.link) {
         m.link = [CADisplayLink displayLinkWithTarget:m selector:@selector(tick:)];
@@ -81,6 +83,5 @@ void RKAdaptiveNoteInput(void) {
 }
 NSInteger RKAdaptiveLevel(void) {
     RKAdaptiveMonitor *m = [RKAdaptiveMonitor shared];
-    // Idle sessions do not carry a reduced level into other applications.
-    return m.enabled && CACurrentMediaTime() - m.lastInput <= 5.0 ? m.level : 0;
+    return m.enabled ? m.level : 0;
 }

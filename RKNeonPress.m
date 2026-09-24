@@ -188,9 +188,14 @@ void RKShowNeonKeyPress(UIView *overlay, CGRect keyFrame, UIColor *color, CGFloa
 
     CGRect face = RKKeyboardKeyFacePath(keyFrame).bounds;
     // Keep this tiny, transient glyph image in memory only; never capture/store input text.
+    UIView *key = nil;
+    UIImage *foreground = nil;
+    // Lightweight/smart path does not snapshot, scan pixels, traverse keys,
+    // or transform the input method's own key layers.
+    if (!reduceMotion) {
     UIView *host = overlay.superview;
     CGRect hostFrame = [overlay convertRect:keyFrame toView:host];
-    UIView *key = sourceView;
+    key = sourceView;
     if (key && !key.window) key = nil;
     if (key) {
         CGRect sourceFrame = [key convertRect:key.bounds toView:host];
@@ -201,7 +206,8 @@ void RKShowNeonKeyPress(UIView *overlay, CGRect keyFrame, UIColor *color, CGFloa
         if (!matches) key = nil;
     }
     if (!key) key = host ? RKPressKeyView(host, host, hostFrame, 0) : nil;
-    UIImage *foreground = RKCachedPressForeground(overlay, key, face);
+    foreground = RKCachedPressForeground(overlay, key, face);
+    }
     RKNeonPressLayer *pulse = [RKNeonPressLayer layer];
     pulse.name = @"neonKeyPress";
     pulse.frame = overlay.bounds;

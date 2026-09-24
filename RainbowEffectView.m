@@ -321,7 +321,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
             }
             RKShowNeonKeyPress(self, value.CGRectValue, color,
                 pressBrightness,
-                duration, UIAccessibilityIsReduceMotionEnabled(), sourceView);
+                duration, UIAccessibilityIsReduceMotionEnabled() || [self flag:@"SmartPerformance"], sourceView);
             break;
         }
         return;
