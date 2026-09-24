@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+<key>items</key><array>
+
+<dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>彩虹键盘光效</string><key>footerText</key><string>只保留日常使用需要的选项。复杂参数统一放到“高级设置”。</string></dict>
+
+<dict><key>cell</key><string>PSSwitchCell</string><key>key</key><string>Enabled</string><key>label</key><string>启用键盘光效</string><key>default</key><true/><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
+
+<dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>效果</string></dict>
+<dict><key>cell</key><string>PSLinkListCell</string><key>key</key><string>EffectStyle</string><key>label</key><string>光效风格</string><key>default</key><integer>0</integer><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>validTitles</key><array><string>波纹</string><string>扩散</string><string>轻弹</string></array><key>validValues</key><array><integer>0</integer><integer>1</integer><integer>2</integer></array><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
+<dict><key>cell</key><string>PSLinkListCell</string><key>key</key><string>ColorMode</string><key>label</key><string>光效颜色</string><key>default</key><integer>0</integer><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>validTitles</key><array><string>彩虹</string><string>固定颜色</string><string>横向渐变</string></array><key>validValues</key><array><integer>0</integer><integer>1</integer><integer>2</integer></array><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
+<dict><key>cell</key><string>PSSliderCell</string><key>key</key><string>Opacity</string><key>label</key><string>光效强度</string><key>default</key><real>0.65</real><key>min</key><real>0.1</real><key>max</key><real>1.0</real><key>showValue</key><true/><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
+
+<dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>性能</string></dict>
+<dict><key>cell</key><string>PSLinkListCell</string><key>key</key><string>PerformanceMode</string><key>label</key><string>性能模式</string><key>default</key><integer>1</integer><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>validTitles</key><array><string>省电</string><string>平衡</string><string>极致</string></array><key>validValues</key><array><integer>0</integer><integer>1</integer><integer>2</integer></array><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
+
+<dict><key>cell</key><string>PSGroupCell</string><key>label</key><string>其他</string></dict>
+<dict><key>cell</key><string>PSSwitchCell</string><key>key</key><string>CandidateGradient</string><key>label</key><string>候选栏渐变</string><key>default</key><true/><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
+<dict><key>cell</key><string>PSLinkCell</string><key>label</key><string>高级设置</string><key>action</key><string>showAdvanced</string></dict>
+<dict><key>cell</key><string>PSLinkCell</string><key>label</key><string>关于与诊断</string><key>action</key><string>showPackageInfo</string></dict>
+<dict><key>cell</key><string>PSLinkCell</string><key>label</key><string>恢复默认设置</string><key>action</key><string>resetToDefaults</string></dict>
+
+</array></dict></plist>
