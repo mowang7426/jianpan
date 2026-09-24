@@ -452,6 +452,69 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 
 @implementation RKBCandidateListController
 
+// Route only these three action rows ourselves. Other preference cells retain
+// PSListController's normal switch/slider behavior.
+- (BOOL)isCandidateActionSpecifier:(PSSpecifier *)specifier {
+    NSString *identifier = [specifier propertyForKey:@"id"];
+    return [identifier isEqualToString:@"candidate.mode"] ||
+           [identifier isEqualToString:@"candidate.start"] ||
+           [identifier isEqualToString:@"candidate.end"];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    PSSpecifier *specifier = [self specifierAtIndexPath:indexPath];
+    if (![self isCandidateActionSpecifier:specifier]) {
+        return [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    }
+    // Use a normal UIKit cell so private Preferences link-cell validation
+    // cannot disable a row with no detail controller.
+    UITableViewCell *cell = [tableView dequeueReusableCellWithIdentifier:@"RKCandidateAction"];
+    if (!cell) {
+        cell = [[UITableViewCell alloc] initWithStyle:UITableViewCellStyleValue1
+                                    reuseIdentifier:@"RKCandidateAction"];
+    }
+    NSString *identifier = [specifier propertyForKey:@"id"];
+    BOOL isMode = [identifier isEqualToString:@"candidate.mode"];
+    cell.textLabel.text = isMode ? @"渐变模式" :
+        ([identifier isEqualToString:@"candidate.start"] ? @"起始颜色" : @"结束颜色");
+    cell.textLabel.textColor = UIColor.labelColor;
+    cell.detailTextLabel.textColor = UIColor.secondaryLabelColor;
+    cell.textLabel.enabled = YES;
+    cell.detailTextLabel.enabled = YES;
+    cell.userInteractionEnabled = YES;
+    cell.contentView.userInteractionEnabled = YES;
+    cell.selectionStyle = UITableViewCellSelectionStyleDefault;
+    cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
+    cell.backgroundColor = UIColor.secondarySystemGroupedBackgroundColor;
+    cell.detailTextLabel.text = nil;
+    if (isMode) {
+        NSArray *titles = @[@"关闭", @"静态渐变", @"流动渐变", @"呼吸渐变", @"彩虹渐变", @"跟随输入"];
+        id saved = RKReadPreferences()[@"CandidateGradientMode"];
+        NSInteger value = saved ? [saved integerValue] : 1;
+        cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : titles[1];
+    }
+    return cell;
+}
+
+- (NSIndexPath *)tableView:(UITableView *)tableView willSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    if ([self isCandidateActionSpecifier:[self specifierAtIndexPath:indexPath]]) return indexPath;
+    return [super tableView:tableView willSelectRowAtIndexPath:indexPath];
+}
+
+- (void)tableView:(UITableView *)tableView didSelectRowAtIndexPath:(NSIndexPath *)indexPath {
+    PSSpecifier *specifier = [self specifierAtIndexPath:indexPath];
+    if (![self isCandidateActionSpecifier:specifier]) {
+        [super tableView:tableView didSelectRowAtIndexPath:indexPath];
+        return;
+    }
+    [tableView deselectRowAtIndexPath:indexPath animated:YES];
+    if (self.presentedViewController) return;
+    NSString *identifier = [specifier propertyForKey:@"id"];
+    if ([identifier isEqualToString:@"candidate.mode"]) [self chooseCandidateGradientMode];
+    else if ([identifier isEqualToString:@"candidate.start"]) [self chooseCandidateStart];
+    else if ([identifier isEqualToString:@"candidate.end"]) [self chooseCandidateEnd];
+}
+
 - (NSMutableArray *)specifiers {
     if (!_specifiers) {
         NSMutableArray *items = [NSMutableArray array];
@@ -483,11 +546,11 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
                                                                set:nil
                                                                get:nil
                                                             detail:nil
-                                                              cell:PSLinkCell
+                                                              cell:PSButtonCell
                                                               edit:nil];
         [mode setProperty:@"CandidateGradientMode" forKey:@"key"];
-        // Programmatic specifiers need a selector binding; an "action" property
-        // string is only interpreted when loading specifiers from a plist.
+        [mode setProperty:@"candidate.mode" forKey:@"id"];
+        [mode setProperty:@YES forKey:@"enabled"];
         [mode setButtonAction:@selector(chooseCandidateGradientMode)];
         [items addObject:mode];
 
@@ -505,8 +568,10 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
                                                                 set:nil
                                                                 get:nil
                                                              detail:nil
-                                                               cell:PSLinkCell
+                                                               cell:PSButtonCell
                                                                edit:nil];
+        [start setProperty:@"candidate.start" forKey:@"id"];
+        [start setProperty:@YES forKey:@"enabled"];
         [start setButtonAction:@selector(chooseCandidateStart)];
         [items addObject:start];
 
@@ -515,8 +580,10 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
                                                               set:nil
                                                               get:nil
                                                            detail:nil
-                                                             cell:PSLinkCell
+                                                             cell:PSButtonCell
                                                              edit:nil];
+        [end setProperty:@"candidate.end" forKey:@"id"];
+        [end setProperty:@YES forKey:@"enabled"];
         [end setButtonAction:@selector(chooseCandidateEnd)];
         [items addObject:end];
 
