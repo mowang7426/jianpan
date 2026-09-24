@@ -108,6 +108,9 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 @interface RKBRootListController : PSListController
 @end
 
+@interface RKBCandidateListController : RKBRootListController
+@end
+
 @implementation RKBRootListController
 
 - (NSMutableArray *)specifiers {
@@ -255,6 +258,11 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
     return cell;
 }
 
+- (void)showCandidateSettings {
+    RKBCandidateListController *controller = [RKBCandidateListController new];
+    [self.navigationController pushViewController:controller animated:YES];
+}
+
 - (void)showAdvanced {
     RKBAdvancedListController *controller = [RKBAdvancedListController new];
     [self.navigationController pushViewController:controller animated:YES];
@@ -387,4 +395,21 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
     [alert addAction:[UIAlertAction actionWithTitle:@"好" style:UIAlertActionStyleDefault handler:nil]];
     [self presentViewController:alert animated:YES completion:nil];
 }
+@end
+
+
+@implementation RKBCandidateListController
+
+- (NSMutableArray *)specifiers {
+    if (!_specifiers) {
+        _specifiers = [self loadSpecifiersFromPlistName:@"RainbowKeyboardCandidate" target:self];
+    }
+    return _specifiers;
+}
+
+- (void)viewDidLoad {
+    [super viewDidLoad];
+    self.title = @"候选栏";
+}
+
 @end
