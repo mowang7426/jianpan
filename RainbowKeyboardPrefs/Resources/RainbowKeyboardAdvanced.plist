@@ -18,8 +18,6 @@
 <dict><key>cell</key><string>PSSwitchCell</string><key>key</key><string>PureBlackKeyboard</string><key>label</key><string>纯黑键盘</string><key>default</key><true/><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
 <dict><key>cell</key><string>PSSwitchCell</string><key>key</key><string>NativeKeyboard</string><key>label</key><string>原生键盘</string><key>default</key><true/><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
 <dict><key>cell</key><string>PSSwitchCell</string><key>key</key><string>WeChatKeyboard</string><key>label</key><string>微信输入法</string><key>default</key><true/><key>defaults</key><string>com.minis.rainbowkeyboard</string><key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string></dict>
-<dict><key>cell</key><string>PSLinkCell</string><key>label</key><string>候选词起始颜色</string><key>action</key><string>chooseCandidateStart</string></dict>
-<dict><key>cell</key><string>PSLinkCell</string><key>label</key><string>候选词结束颜色</string><key>action</key><string>chooseCandidateEnd</string></dict>
 <dict><key>cell</key><string>PSLinkCell</string><key>label</key><string>键盘底色</string><key>action</key><string>chooseKeyboardBackground</string></dict>
 <dict><key>cell</key><string>PSLinkCell</string><key>label</key><string>键帽颜色</string><key>action</key><string>chooseKeycapColor</string></dict>
 <dict><key>cell</key><string>PSLinkCell</string><key>label</key><string>单色灯光颜色</string><key>action</key><string>choosePressColor</string></dict>
