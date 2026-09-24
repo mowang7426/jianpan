@@ -6,6 +6,7 @@
 #import "RKPreferences.h"
 
 static NSDictionary *RKCandidatePrefs;
+static CGGradientRef RKCandidateCachedGradient;
 static NSHashTable<UIView *> *RKCandidateViews;
 static __thread NSUInteger RKCandidateDrawingDepth;
 static __thread NSUInteger RKNativeDrawingScope;
@@ -47,7 +48,14 @@ static CGFloat RKCandidateAnimationSpeed = 0.14;
         return;
     }
     for (UIView *view in RKCandidateViews.allObjects) {
-        [view.layer setNeedsDisplay];
+        if (!view.window || view.hidden || view.alpha <= 0.01 || CGRectIsEmpty(view.bounds)) continue;
+        BOOL visible = YES;
+        for (UIView *parent = view.superview; parent; parent = parent.superview) {
+            if (parent.hidden || parent.alpha <= 0.01) { visible = NO; break; }
+        }
+        if (!visible) continue;
+        if (!CGRectIntersectsRect([view convertRect:view.bounds toView:view.window], view.window.bounds)) continue;
+        // setNeedsDisplay already invalidates the backing layer.
         [view setNeedsDisplay];
     }
 }
@@ -73,7 +81,8 @@ static void RKCandidateStartAnimationIfNeeded(void) {
     RKCandidateDisplayLink =
         [CADisplayLink displayLinkWithTarget:[RKCandidateAnimatorProxy shared]
                                      selector:@selector(tick:)];
-    RKCandidateDisplayLink.preferredFramesPerSecond = 30;
+    // Only the decorative gradient is throttled; input and layout are untouched.
+    RKCandidateDisplayLink.preferredFramesPerSecond = 20;
     [RKCandidateDisplayLink addToRunLoop:[NSRunLoop mainRunLoop]
                                  forMode:NSRunLoopCommonModes];
 }
@@ -129,6 +138,10 @@ static void RKCandidateReload(void) {
     NSDictionary *preferences = RKCandidateReadPreferences();
     if ([RKCandidatePrefs isEqual:preferences]) return;
     RKCandidatePrefs = preferences;
+    if (RKCandidateCachedGradient) {
+        CGGradientRelease(RKCandidateCachedGradient);
+        RKCandidateCachedGradient = NULL;
+    }
     RKCandidatePhaseStart = CACurrentMediaTime();
     if (!RKCandidateFlag(@"CandidateGradient")) RKCandidateStopAnimation();
     for (UIView *view in RKCandidateViews.allObjects) {
@@ -150,14 +163,17 @@ static void RKCandidateChanged(CFNotificationCenterRef center, void *observer, C
 static void RKDrawGradientText(CGRect rect, CGRect textRect, void (^original)(void)) {
     CGContextRef ctx = UIGraphicsGetCurrentContext();
     if (RKCandidateDrawingDepth || !ctx || CGRectIsEmpty(textRect)) { original(); return; }
-    UIColor *first = RKCandidateColor(RKCandidatePrefs[@"CandidateStart"], [UIColor colorWithRed:0 green:.65 blue:1 alpha:1]);
-    UIColor *last = RKCandidateColor(RKCandidatePrefs[@"CandidateEnd"], [UIColor colorWithRed:.85 green:.15 blue:1 alpha:1]);
-    NSArray *colors = @[(id)first.CGColor,(id)last.CGColor];
+    if (!RKCandidateCachedGradient) {
+        UIColor *first = RKCandidateColor(RKCandidatePrefs[@"CandidateStart"], [UIColor colorWithRed:0 green:.65 blue:1 alpha:1]);
+        UIColor *last = RKCandidateColor(RKCandidatePrefs[@"CandidateEnd"], [UIColor colorWithRed:.85 green:.15 blue:1 alpha:1]);
+        NSArray *colors = @[(id)first.CGColor,(id)last.CGColor];
+        CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
+        RKCandidateCachedGradient = CGGradientCreateWithColors(space, (__bridge CFArrayRef)colors, NULL);
+        CGColorSpaceRelease(space);
+    }
+    CGGradientRef gradient = RKCandidateCachedGradient ? CGGradientRetain(RKCandidateCachedGradient) : NULL;
     CGFloat phase = RKCandidateAnimationPhase();
     CGFloat travel = CGRectGetWidth(textRect) * 0.42 * phase;
-    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-    CGGradientRef gradient = CGGradientCreateWithColors(space, (__bridge CFArrayRef)colors, NULL);
-    CGColorSpaceRelease(space);
     if (!gradient) { original(); return; }
     RKCandidateRenderCount++;
     CGContextSaveGState(ctx);
@@ -179,6 +195,7 @@ static void RKDrawGradientText(CGRect rect, CGRect textRect, void (^original)(vo
     }
 }
 static void RKDrawCandidate(UILabel *label, CGRect rect, BOOL native, void (^original)(void)) {
+    if (RKCandidateDrawingDepth) { original(); return; }
     if (RKCandidateIsWeType(label)) native = NO;
     BOOL region = native ? RKNativeCandidateRegion(label) : RKCandidateRegion(label);
     if (!region || RKCandidateDrawingDepth) { original(); return; }
@@ -262,7 +279,9 @@ static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^origina
 %group RKTUINative
 %hook TUICandidateLabel
 - (void)drawRect:(CGRect)rect {
-    RKDrawNativeGlyphView((UIView *)self, rect, ^{ %orig; });
+    RKDrawNativeGlyphView((UIView *)self, rect, ^{ 
+        %orig;
+ });
 }
 %end
 %end
@@ -273,7 +292,9 @@ static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^origina
     // UIKit's normal-label path preserves layout and selection, unlike tinting
     // individual cached morphing images (which would restart the gradient per glyph).
     if (RKCandidateFlag(@"CandidateGradient") && RKCandidateFlag(@"CandidateNative")) return NO;
-    return %orig;
+    return 
+        %orig;
+
 }
 %end
 %end
@@ -346,7 +367,9 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook UILabel
 - (void)drawTextInRect:(CGRect)rect {
-    RKDrawCandidate(self, rect, YES, ^{ %orig; });
+    RKDrawCandidate(self, rect, YES, ^{ 
+        %orig;
+ });
 }
 %end
 
@@ -354,12 +377,16 @@ static void RKWriteNativeDiagnostic(void) {
 %hook UIView
 - (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)context {
     BOOL candidate = RKNativeCandidateRegion(self);
-    if (!candidate) { %orig; return; }
+    if (!candidate) { 
+        %orig;
+ return; }
     [RKCandidateViews addObject:self];
     if (RKCandidateFlag(@"CandidateGradient")) RKCandidateStartAnimationIfNeeded();
     NSUInteger before = RKCandidateRenderCount;
     RKNativeDrawingScope++;
-    @try { %orig; } @finally {
+    @try { 
+        %orig;
+ } @finally {
         RKNativeDrawingScope--;
         if (RKCandidateRenderCount != before)
             objc_setAssociatedObject(self, &RKCandidateRenderedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -369,46 +396,72 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook NSString
 - (void)drawInRect:(CGRect)rect withAttributes:(NSDictionary *)attributes {
-    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
+    if (!RKNativeTextDrawingEnabled()) { 
+        %orig;
+ return; }
     CGSize size = [(NSString *)self boundingRectWithSize:rect.size options:NSStringDrawingUsesLineFragmentOrigin
                                              attributes:attributes context:nil].size;
-    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ %orig; });
+    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ 
+        %orig;
+ });
 }
 - (void)drawAtPoint:(CGPoint)point withAttributes:(NSDictionary *)attributes {
-    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
+    if (!RKNativeTextDrawingEnabled()) { 
+        %orig;
+ return; }
     CGRect rect = {point, [(NSString *)self sizeWithAttributes:attributes]};
-    RKDrawGradientText(rect, rect, ^{ %orig; });
+    RKDrawGradientText(rect, rect, ^{ 
+        %orig;
+ });
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options attributes:(NSDictionary *)attributes context:(NSStringDrawingContext *)context {
-    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
+    if (!RKNativeTextDrawingEnabled()) { 
+        %orig;
+ return; }
     CGSize size = [(NSString *)self boundingRectWithSize:rect.size options:options attributes:attributes context:context].size;
-    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ %orig; });
+    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ 
+        %orig;
+ });
 }
 %end
 
 %hook NSAttributedString
 - (void)drawInRect:(CGRect)rect {
-    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
+    if (!RKNativeTextDrawingEnabled()) { 
+        %orig;
+ return; }
     CGSize size = [(NSAttributedString *)self boundingRectWithSize:rect.size
         options:NSStringDrawingUsesLineFragmentOrigin context:nil].size;
-    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ %orig; });
+    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ 
+        %orig;
+ });
 }
 - (void)drawAtPoint:(CGPoint)point {
-    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
+    if (!RKNativeTextDrawingEnabled()) { 
+        %orig;
+ return; }
     CGRect rect = {point, [(NSAttributedString *)self size]};
-    RKDrawGradientText(rect, rect, ^{ %orig; });
+    RKDrawGradientText(rect, rect, ^{ 
+        %orig;
+ });
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options context:(NSStringDrawingContext *)context {
-    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
+    if (!RKNativeTextDrawingEnabled()) { 
+        %orig;
+ return; }
     CGSize size = [(NSAttributedString *)self boundingRectWithSize:rect.size options:options context:context].size;
-    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ %orig; });
+    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ 
+        %orig;
+ });
 }
 %end
 
 // WeType overrides UILabel drawing; keep its existing concrete hook.
 %hook WBTextItemLabel
 - (void)drawTextInRect:(CGRect)rect {
-    RKDrawCandidate((UILabel *)self, rect, NO, ^{ %orig; });
+    RKDrawCandidate((UILabel *)self, rect, NO, ^{ 
+        %orig;
+ });
 }
 %end
 %ctor {
