@@ -296,7 +296,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
             self.fastFeedback.name = @"RKFastInputFeedback";
             self.fastFeedback.cornerRadius = 5;
         }
-        // Reuse one layer and one animation key; no delayed per-press cleanup.
         for (CALayer *layer in self.layer.sublayers.copy)
             if (layer != self.fastFeedback) [layer removeFromSuperlayer];
         if (self.fastFeedback.superlayer != self.layer) [self.layer addSublayer:self.fastFeedback];
@@ -315,10 +314,20 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         self.fastFeedback.backgroundColor = color.CGColor;
         self.fastFeedback.opacity = 0;
         [CATransaction commit];
+        // Replace existing animations, never accumulate springs or cleanup blocks.
+        [self.fastFeedback removeAllAnimations];
+        if (!UIAccessibilityIsReduceMotionEnabled()) {
+            CAKeyframeAnimation *bounce = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
+            bounce.values = @[@.94, @1.015, @1];
+            bounce.keyTimes = @[@0, @.55, @1];
+            bounce.duration = .16;
+            bounce.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+            [self.fastFeedback addAnimation:bounce forKey:@"fastBounce"];
+        }
         CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
         fade.fromValue = @(.32 * bright);
         fade.toValue = @0;
-        fade.duration = .12;
+        fade.duration = .18;
         [self.fastFeedback addAnimation:fade forKey:@"fastFade"];
         return;
     }
