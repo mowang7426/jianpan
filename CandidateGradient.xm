@@ -4,9 +4,11 @@
 #import <mach-o/dyld.h>
 #import <os/lock.h>
 #import "RKPreferences.h"
-#import "RKThemeEngine.h"
 
-static void RKCandidateDisplayTick(CADisplayLink *link);
+static NSHashTable<UIView *> *RKCandidateViews;
+static CADisplayLink *RKCandidateDisplayLink;
+static CFTimeInterval RKCandidatePhaseStart;
+static CFTimeInterval RKCandidateInputPulseUntil;
 
 @interface RKCandidateAnimatorProxy : NSObject
 + (instancetype)shared;
@@ -14,11 +16,19 @@ static void RKCandidateDisplayTick(CADisplayLink *link);
 @end
 @implementation RKCandidateAnimatorProxy
 + (instancetype)shared { static RKCandidateAnimatorProxy *p; static dispatch_once_t once; dispatch_once(&once, ^{ p=[self new]; }); return p; }
-- (void)tick:(CADisplayLink *)link { RKCandidateDisplayTick(link); }
+- (void)tick:(CADisplayLink *)link {
+    if (!RKCandidateDisplayLink) return;
+    if (RKCandidateGradientMode() <= 1 || RKCandidateViews.count == 0) {
+        [link invalidate];
+        RKCandidateDisplayLink = nil;
+        return;
+    }
+    for (UIView *view in RKCandidateViews.allObjects) { [view.layer setNeedsDisplay]; [view setNeedsDisplay]; }
+}
 @end
 
+
 static NSDictionary *RKCandidatePrefs;
-static NSHashTable<UIView *> *RKCandidateViews;
 static __thread NSUInteger RKCandidateDrawingDepth;
 static __thread NSUInteger RKNativeDrawingScope;
 static __thread NSUInteger RKCandidateRenderCount;
@@ -30,16 +40,10 @@ static NSUInteger RKNativeLabelDraws;
 static os_unfair_lock RKHookLock = OS_UNFAIR_LOCK_INIT;
 static BOOL RKHookInstallQueued;
 static void RKWriteNativeDiagnostic(void);
-static CADisplayLink *RKCandidateDisplayLink;
-static CFTimeInterval RKCandidatePhaseStart;
-static CFTimeInterval RKCandidateLastReload;
-static NSUInteger RKCandidateActivitySerial;
-static CFTimeInterval RKCandidateInputPulseUntil;
 
 static NSInteger RKCandidateGradientMode(void) {
     NSInteger mode = [RKCandidatePrefs[@"CandidateGradientMode"] integerValue];
-    if (mode < 0 || mode > 5) mode = 1;
-    return mode;
+    return (mode >= 0 && mode <= 5) ? mode : 1;
 }
 static CGFloat RKCandidateGradientSpeed(void) {
     CGFloat v = [RKCandidatePrefs[@"CandidateGradientSpeed"] doubleValue];
@@ -49,30 +53,10 @@ static CGFloat RKCandidateGradientIntensity(void) {
     CGFloat v = [RKCandidatePrefs[@"CandidateGradientIntensity"] doubleValue];
     return isfinite(v) ? MIN(1.0, MAX(.1, v)) : 1.0;
 }
-static void RKCandidateInvalidateViews(void) {
-    for (UIView *view in RKCandidateViews.allObjects) {
-        [view.layer setNeedsDisplay];
-        [view setNeedsDisplay];
-    }
-}
-static void RKCandidateDisplayTick(CADisplayLink *link) {
-    if (RKCandidateGradientMode() <= 1 || RKCandidateViews.count == 0) {
-        [link invalidate];
-        RKCandidateDisplayLink = nil;
-        return;
-    }
-    RKCandidateInvalidateViews();
-}
-static void RKCandidateInputChanged(NSNotification *note) {
-    RKCandidateInputPulseUntil = CACurrentMediaTime() + .32;
-    RKCandidatePhaseStart = CACurrentMediaTime();
-}
-
 static void RKCandidateUpdateAnimationState(void) {
     NSInteger mode = RKCandidateGradientMode();
     if (mode > 1 && RKCandidateViews.count > 0 && !RKCandidateDisplayLink) {
         RKCandidatePhaseStart = CACurrentMediaTime();
-        // Keep a single lightweight proxy; never retain candidate views.
         RKCandidateDisplayLink = [CADisplayLink displayLinkWithTarget:[RKCandidateAnimatorProxy shared] selector:@selector(tick:)];
         RKCandidateDisplayLink.preferredFramesPerSecond = 30;
         [RKCandidateDisplayLink addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
@@ -81,11 +65,13 @@ static void RKCandidateUpdateAnimationState(void) {
         RKCandidateDisplayLink = nil;
     }
 }
-
+static void RKCandidateInputChanged(NSNotification *note) {
+    RKCandidateInputPulseUntil = CACurrentMediaTime() + .32;
+    RKCandidatePhaseStart = CACurrentMediaTime();
+}
 
 static NSDictionary *RKCandidateReadPreferences(void) {
-    // Candidate gradients are intentionally independent from keyboard themes.
-    return RKReadStoredPreferences();
+    return RKReadEffectivePreferences();
 }
 
 static BOOL RKCandidateRegion(UIView *view) {
@@ -130,9 +116,7 @@ static void RKCandidateReload(void) {
     NSDictionary *preferences = RKCandidateReadPreferences();
     if ([RKCandidatePrefs isEqual:preferences]) return;
     RKCandidatePrefs = preferences;
-    RKCandidateLastReload = CACurrentMediaTime();
-    RKCandidateActivitySerial++;
-    RKCandidatePhaseStart = RKCandidateLastReload;
+    RKCandidatePhaseStart = CACurrentMediaTime();
     RKCandidateUpdateAnimationState();
     for (UIView *view in RKCandidateViews.allObjects) {
         // Drop our rendered pixels, not the original text, so disabled gradients
@@ -174,10 +158,11 @@ static void RKDrawGradientText(CGRect rect, CGRect textRect, void (^original)(vo
         first = RKCandidateShiftedColor(first, phase, intensity);
         last = RKCandidateShiftedColor(last, phase, intensity);
     } else if (mode == 3) {
-        CGFloat breathe = .55 + .45 * (0.5 + 0.5 * sin((CACurrentMediaTime()-RKCandidatePhaseStart) * RKCandidateGradientSpeed() * M_PI * 2.0));
+        CGFloat breathe = .55 + .45 * (0.5 + 0.5 * sin((now-RKCandidatePhaseStart) * RKCandidateGradientSpeed() * M_PI * 2.0));
         first = [first colorWithAlphaComponent:breathe * intensity];
         last = [last colorWithAlphaComponent:breathe * intensity];
-    } else if (mode == 4) {
+    }
+    if (mode == 4) {
         NSArray *base = @[[UIColor colorWithHue:0 saturation:1 brightness:1 alpha:intensity],
                           [UIColor colorWithHue:.14 saturation:1 brightness:1 alpha:intensity],
                           [UIColor colorWithHue:.33 saturation:1 brightness:1 alpha:intensity],
@@ -239,7 +224,6 @@ static void RKDrawCandidate(UILabel *label, CGRect rect, BOOL native, void (^ori
     BOOL region = native ? RKNativeCandidateRegion(label) : RKCandidateRegion(label);
     if (!region || RKCandidateDrawingDepth) { original(); return; }
     [RKCandidateViews addObject:label];
-    RKCandidateUpdateAnimationState();
     if (!RKCandidateFlag(@"CandidateGradient") ||
         !RKCandidateFlag(native ? @"CandidateNative" : @"CandidateWeType")) {
         RKCandidateDrawingDepth++;
@@ -261,7 +245,6 @@ static BOOL RKNativeTextDrawingEnabled(void) {
 // its background, and use their ink bounds so short words get both endpoint colors.
 static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^original)(void)) {
     [RKCandidateViews addObject:view];
-    RKCandidateUpdateAnimationState();
     CGRect bounds = view.bounds;
     if (!RKCandidateFlag(@"CandidateGradient") ||
         !RKCandidateFlag(RKCandidateIsWeType(view) ? @"CandidateWeType" : @"CandidateNative") ||

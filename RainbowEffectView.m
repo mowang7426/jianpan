@@ -6,7 +6,7 @@
 #import "RKPreferences.h"
 #import "RKThemeEngine.h"
 static NSDictionary *RKReadPreferences(void) {
-    return RKReadEffectivePreferences();
+    return RKThemeMergedPreferences(RKReadEffectivePreferences());
 }
 
 @class RainbowEffectView;
@@ -48,7 +48,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         CFSTR("com.minis.rainbowkeyboard.changed"), NULL);
 }
 - (void)reloadConfiguration {
-    NSDictionary *newConfig = RKThemeMergedPreferences(RKReadPreferences());
+    NSDictionary *newConfig = RKReadPreferences();
     if (!newConfig) newConfig = @{};
     self.config = newConfig;
 }
