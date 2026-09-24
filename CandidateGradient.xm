@@ -25,7 +25,7 @@ static BOOL RKCandidateFlag(NSString *key);
 
 static CADisplayLink *RKCandidateDisplayLink;
 static CFTimeInterval RKCandidatePhaseStart;
-static CGFloat RKCandidateAnimationSpeed = 0.22;
+static CGFloat RKCandidateAnimationSpeed = 0.14;
 
 @interface RKCandidateAnimatorProxy : NSObject
 + (instancetype)shared;
@@ -55,9 +55,14 @@ static CGFloat RKCandidateAnimationSpeed = 0.22;
 
 static CGFloat RKCandidateAnimationPhase(void) {
     if (!RKCandidatePhaseStart) return 0;
+
     CFTimeInterval elapsed = CACurrentMediaTime() - RKCandidatePhaseStart;
-    CGFloat phase = fmod((CGFloat)(elapsed * RKCandidateAnimationSpeed), 1.0);
-    return phase < 0 ? phase + 1.0 : phase;
+    CGFloat raw = fmod((CGFloat)(elapsed * RKCandidateAnimationSpeed), 1.0);
+    if (raw < 0) raw += 1.0;
+
+    // Smooth periodic motion: velocity is zero at both ends, so the
+    // gradient never snaps when the animation loops.
+    return 0.5 - 0.5 * cos(raw * M_PI * 2.0);
 }
 
 static void RKCandidateStartAnimationIfNeeded(void) {
@@ -149,7 +154,7 @@ static void RKDrawGradientText(CGRect rect, CGRect textRect, void (^original)(vo
     UIColor *last = RKCandidateColor(RKCandidatePrefs[@"CandidateEnd"], [UIColor colorWithRed:.85 green:.15 blue:1 alpha:1]);
     NSArray *colors = @[(id)first.CGColor,(id)last.CGColor];
     CGFloat phase = RKCandidateAnimationPhase();
-    CGFloat travel = CGRectGetWidth(textRect) * 0.55 * phase;
+    CGFloat travel = CGRectGetWidth(textRect) * 0.42 * phase;
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
     CGGradientRef gradient = CGGradientCreateWithColors(space, (__bridge CFArrayRef)colors, NULL);
     CGColorSpaceRelease(space);
