@@ -1166,28 +1166,33 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 
 %group RKBlackKeyplane
 %hook UIKBKeyplaneView
-- (void)layoutSubviews { %orig; RKUpdateBlackKeyplane((UIView *)self); }
+- (void)layoutSubviews { %orig;
+ RKUpdateBlackKeyplane((UIView *)self); }
 %end
 %end
 %group RKBlackKeyplaneDisplay
 %hook UIKBKeyplaneView
-- (void)displayLayer:(CALayer *)layer { %orig; RKUpdateBlackKeyplane((UIView *)self); }
+- (void)displayLayer:(CALayer *)layer { %orig;
+ RKUpdateBlackKeyplane((UIView *)self); }
 %end
 %end
 %group RKBlackKeyplaneRender
 %hook UIKBKeyplaneView
-- (void)drawContentsOfRenderers:(id)renderers { %orig; RKUpdateBlackKeyplane((UIView *)self); }
+- (void)drawContentsOfRenderers:(id)renderers { %orig;
+ RKUpdateBlackKeyplane((UIView *)self); }
 %end
 %end
 %group RKBlackSplitLayout
 %hook UIKBSplitImageView
-- (void)layoutSubviews { %orig; RKUpdateBlackSplitView((UIView *)self); }
+- (void)layoutSubviews { %orig;
+ RKUpdateBlackSplitView((UIView *)self); }
 %end
 %end
 %group RKBlackSplitImage
 %hook UIKBSplitImageView
 - (void)setImage:(id)image cachedWidth:(CGFloat)width keyplane:(id)plane {
     %orig;
+
     RKUpdateBlackSplitView((UIView *)self);
 }
 %end
@@ -1196,6 +1201,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBSplitImageView
 - (void)setImage:(id)image splitLeft:(id)left splitRight:(id)right keyplane:(id)plane {
     %orig;
+
     RKUpdateBlackSplitView((UIView *)self);
 }
 %end
@@ -1205,10 +1211,12 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook CAShapeLayer
 - (void)setPath:(CGPathRef)path {
     %orig;
+
     RKRefreshBlackFaceGeometry((CALayer *)self);
 }
 - (void)setFillColor:(CGColorRef)color {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackUpdatingColorKey) || !NSThread.isMainThread) return;
     RKRefreshBlackFaceGeometry((CALayer *)self);
     if ([objc_getAssociatedObject(self, &RKBlackFaceStyleKey) boolValue])
@@ -1218,6 +1226,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook CAGradientLayer
 - (void)setColors:(NSArray *)colors {
     %orig;
+
     if ([objc_getAssociatedObject(self, &RKBlackFaceStyleKey) boolValue] && NSThread.isMainThread)
         RKUpdateBlackGradient((CAGradientLayer *)self, RKBlackEnabled());
 }
@@ -1225,6 +1234,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIView
 - (void)didAddSubview:(UIView *)subview {
     %orig;
+
     RKPrepareAttachedKeyLayer(subview.layer);
 }
 - (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)context {
@@ -1236,6 +1246,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIInputViewController
 - (void)viewDidLayoutSubviews {
     %orig;
+
     if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"])
         RKApplyBlackKeyboardHost(((UIViewController *)self).view);
 }
@@ -1244,11 +1255,13 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIControl
 - (void)setHighlighted:(BOOL)highlighted {
     %orig;
+
     CALayer *root = RKBlackKeyRoot(((UIView *)self).layer);
     if ([root.delegate isKindOfClass:UIView.class]) RKRefreshBlackKeyState((UIView *)root.delegate);
 }
 - (void)setSelected:(BOOL)selected {
     %orig;
+
     CALayer *root = RKBlackKeyRoot(((UIView *)self).layer);
     if ([root.delegate isKindOfClass:UIView.class]) RKRefreshBlackKeyState((UIView *)root.delegate);
 }
@@ -1256,6 +1269,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIButton
 - (void)setBackgroundImage:(UIImage *)image forState:(UIControlState)state {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackButtonImagesKey) && NSThread.isMainThread)
         RKUpdateBlackButton((UIButton *)self, RKBlackEnabled());
 }
@@ -1263,16 +1277,19 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIImageView
 - (void)setImage:(UIImage *)image {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
         RKUpdateBlackUIImage((UIImageView *)self, RKBlackEnabled());
 }
 - (void)setHighlightedImage:(UIImage *)image {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
         RKUpdateBlackUIImage((UIImageView *)self, RKBlackEnabled());
 }
 - (void)setHighlighted:(BOOL)highlighted {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackUIImageRoleKey))
         RKUpdateBlackUIImage((UIImageView *)self, RKBlackEnabled());
 }
@@ -1280,11 +1297,13 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UILabel
 - (void)setTextColor:(UIColor *)color {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackLabelManagedKey))
         RKUpdateBlackLabel((UILabel *)self, RKBlackEnabled());
 }
 - (void)setAttributedText:(NSAttributedString *)text {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackLabelManagedKey))
         RKUpdateBlackLabel((UILabel *)self, RKBlackEnabled());
 }
@@ -1293,31 +1312,38 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook CALayer
 - (void)setBounds:(CGRect)bounds {
     %orig;
+
     if ([self isKindOfClass:CAShapeLayer.class] || [self isKindOfClass:CAGradientLayer.class])
         RKRefreshBlackFaceGeometry((CALayer *)self);
 }
 - (void)addSublayer:(CALayer *)layer {
     %orig;
+
     RKPrepareAttachedKeyLayer(layer);
 }
 - (void)insertSublayer:(CALayer *)layer atIndex:(unsigned int)index {
     %orig;
+
     RKPrepareAttachedKeyLayer(layer);
 }
 - (void)insertSublayer:(CALayer *)layer below:(CALayer *)sibling {
     %orig;
+
     RKPrepareAttachedKeyLayer(layer);
 }
 - (void)insertSublayer:(CALayer *)layer above:(CALayer *)sibling {
     %orig;
+
     RKPrepareAttachedKeyLayer(layer);
 }
 - (void)replaceSublayer:(CALayer *)oldLayer with:(CALayer *)newLayer {
     %orig;
+
     RKPrepareAttachedKeyLayer(newLayer);
 }
 - (void)setSublayers:(NSArray *)layers {
     %orig;
+
     for (CALayer *layer in layers) RKPrepareAttachedKeyLayer(layer);
 }
 - (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key {
@@ -1328,19 +1354,26 @@ void RKApplyBlackKeyboardHost(UIView *host) {
         return;
     }
     %orig;
+
 }
 - (void)setHidden:(BOOL)hidden {
-    if (objc_getAssociatedObject(self, &RKBlackHidingKey)) { %orig; return; }
+    if (objc_getAssociatedObject(self, &RKBlackHidingKey)) { %orig;
+ return; }
     NSNumber *original = objc_getAssociatedObject(self, &RKBlackHiddenKey);
     if (original) {
         objc_setAssociatedObject(self, &RKBlackHiddenKey, @(hidden), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-        if (RKBlackEnabled() && RKBlackInScope((CALayer *)self)) { %orig(YES); return; }
+        if (RKBlackEnabled() && RKBlackInScope((CALayer *)self)) {
+            %orig(YES);
+            return;
+        }
         objc_setAssociatedObject(self, &RKBlackHiddenKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     %orig;
+
 }
 - (void)setContents:(id)contents {
     %orig;
+
     if (!objc_getAssociatedObject(self, &RKBlackManagedLayerKey) ||
         objc_getAssociatedObject(self, &RKBlackUpdatingImageKey)) return;
     if (NSThread.isMainThread) RKUpdateBlackActionImage((CALayer *)self, RKBlackEnabled());
@@ -1354,6 +1387,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 }
 - (void)setBackgroundColor:(CGColorRef)color {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackManagedLayerKey) &&
         !objc_getAssociatedObject(self, &RKBlackUpdatingColorKey) && NSThread.isMainThread)
         RKUpdateBlackLayerColor((CALayer *)self, RKBlackEnabled(), NO);
@@ -1363,10 +1397,14 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 
 %group RKBlackRenderConfig
 %hook UIKBRenderConfig
-- (CGFloat)keycapOpacity { return RKBlackEnabled() ? 0 : %orig; }
-- (CGFloat)lightKeycapOpacity { return RKBlackEnabled() ? 0 : %orig; }
-- (BOOL)lightKeyboard { return RKBlackEnabled() ? NO : %orig; }
-- (BOOL)whiteText { return RKBlackEnabled() ? YES : %orig; }
+- (CGFloat)keycapOpacity { return RKBlackEnabled() ? 0 : %orig;
+ }
+- (CGFloat)lightKeycapOpacity { return RKBlackEnabled() ? 0 : %orig;
+ }
+- (BOOL)lightKeyboard { return RKBlackEnabled() ? NO : %orig;
+ }
+- (BOOL)whiteText { return RKBlackEnabled() ? YES : %orig;
+ }
 %end
 %end
 
@@ -1390,6 +1428,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBKeyView
 - (void)layoutSubviews {
     %orig;
+
     RKRefreshSystemKey((UIView *)self);
 }
 %end
@@ -1400,7 +1439,8 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)changeBackgroundToActiveIfNecessary {
     void *previous = RKNativeBackgroundContext;
     if (RKNativeKeyView((UIView *)self)) RKNativeBackgroundContext = (__bridge void *)self;
-    @try { %orig; } @finally { RKNativeBackgroundContext = previous; }
+    @try { %orig;
+ } @finally { RKNativeBackgroundContext = previous; }
     RKRefreshSystemKey((UIView *)self);
 }
 %end
@@ -1410,7 +1450,8 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)changeBackgroundToEnabled {
     void *previous = RKNativeBackgroundContext;
     if (RKNativeKeyView((UIView *)self)) RKNativeBackgroundContext = (__bridge void *)self;
-    @try { %orig; } @finally { RKNativeBackgroundContext = previous; }
+    @try { %orig;
+ } @finally { RKNativeBackgroundContext = previous; }
     RKRefreshSystemKey((UIView *)self);
 }
 %end
@@ -1419,6 +1460,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBKeyView
 - (void)prepareForDisplay {
     %orig;
+
     RKRefreshSystemKey((UIView *)self);
 }
 %end
@@ -1428,6 +1470,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBKeyView
 - (void)_populateLayer:(CALayer *)layer withContents:(id)contents {
     %orig;
+
     if (RKNativeKeyView((UIView *)self)) RKRefreshNativeKey((UIView *)self);
     else {
         RKUpdateBlackKeyLayers(layer, RKBlackEnabled(), 0, ((UIView *)self).layer);
@@ -1441,6 +1484,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBKeyView
 - (void)displayLayer:(CALayer *)layer {
     %orig;
+
     if (RKNativeKeyView((UIView *)self)) RKRefreshNativeKey((UIView *)self);
     else RKUpdateBlackActionKey((UIView *)self);
 }
@@ -1451,6 +1495,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook _UIKBKeyViewLayer
 - (void)setContents:(id)contents {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKBlackUpdatingImageKey)) return;
     if (NSThread.isMainThread) {
         RKUpdateBlackActionImage((CALayer *)self, RKBlackEnabled());
@@ -1469,6 +1514,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBKeyView
 - (void)drawContentsOfRenderers:(id)renderers {
     %orig;
+
     RKRefreshNativeKey((UIView *)self);
 }
 %end
@@ -1477,6 +1523,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBKeyView
 - (id)layerForRenderFlags:(long long)flags {
     id layer = %orig;
+
     if (RKNativeBackgroundContext == (__bridge void *)self && [layer isKindOfClass:CALayer.class])
         RKMarkNativeBackground((UIView *)self, layer);
     return layer;
@@ -1486,7 +1533,8 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %group RKNativeMultiplyLayer
 %hook CALayer
 - (void)setContentsMultiplyColor:(CGColorRef)color {
-    if (objc_getAssociatedObject(self, &RKNativeMultiplyUpdatingKey)) { %orig; return; }
+    if (objc_getAssociatedObject(self, &RKNativeMultiplyUpdatingKey)) { %orig;
+ return; }
     NSDictionary *cache = objc_getAssociatedObject(self, &RKNativeMultiplyKey);
     if (cache) {
         NSMutableDictionary *updated = [cache mutableCopy];
@@ -1494,10 +1542,12 @@ void RKApplyBlackKeyboardHost(UIView *host) {
         objc_setAssociatedObject(self, &RKNativeMultiplyKey, updated, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
     %orig;
+
     if (objc_getAssociatedObject(self, &RKNativeBackgroundLayerKey)) RKUpdateNativeMultiply((CALayer *)self);
 }
 - (void)setContents:(id)contents {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKNativeBackgroundLayerKey)) RKUpdateNativeMultiply((CALayer *)self);
 }
 %end
@@ -1506,6 +1556,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBRenderFactory
 - (id)traitsForKey:(id)key onKeyplane:(id)plane {
     id traits = %orig;
+
     return RKNativeKeyTraits(traits, key, plane);
 }
 %end
@@ -1515,6 +1566,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (CGGradientRef)CGGradient {
     UIColor *color = objc_getAssociatedObject(self, &RKNativeGradientColorKey);
     if (!color) return %orig;
+
     CGFloat opacity = ((CGFloat (*)(id, SEL))objc_msgSend)(self, @selector(opacity));
     color = [color colorWithAlphaComponent:isfinite(opacity) ? MIN(1, MAX(0, opacity)) : 1];
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
@@ -1526,9 +1578,11 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 }
 - (BOOL)usesRGBColors {
     return objc_getAssociatedObject(self, &RKNativeGradientColorKey) ? YES : %orig;
+
 }
 - (id)copyWithZone:(NSZone *)zone {
     id copy = %orig;
+
     UIColor *color = objc_getAssociatedObject(self, &RKNativeGradientColorKey);
     if (color) objc_setAssociatedObject(copy, &RKNativeGradientColorKey, color, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     return copy;
@@ -1539,6 +1593,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBKeyView
 - (void)configureBackdropView:(id)backdrop forRenderConfig:(id)config {
     %orig;
+
     if (!RKNativeKeyView((UIView *)self) || ![backdrop isKindOfClass:NSClassFromString(@"UIKBBackdropView")]) return;
     RKBlackScope *owner = [RKBlackScope new];
     owner.root = ((UIView *)self).layer;
@@ -1554,6 +1609,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
     RKBeginNativeStateTransition();
     @try {
         %orig;
+
         RKQueueNativeStateKey((UIView *)self, key, state);
     } @finally {
         if (RKNativeStateTransitionDepth) RKEndNativeStateTransition();
@@ -1567,6 +1623,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
     RKBeginNativeStateTransition();
     @try {
         %orig;
+
         RKQueueNativeStateKey((UIView *)self, key, state);
     } @finally {
         if (RKNativeStateTransitionDepth) RKEndNativeStateTransition();
@@ -1578,6 +1635,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBKeyplaneView
 - (id)viewForKey:(id)key state:(int)state {
     id view = %orig;
+
     if ([view isKindOfClass:UIView.class]) RKRefreshNativeKey(view);
     return view;
 }
@@ -1587,29 +1645,39 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBBackdropView
 - (void)layoutSubviews {
     %orig;
+
     RKUpdateNativeBackdrop((UIView *)self);
 }
 %end
 %hook CALayer
 - (void)setCompositingFilter:(id)filter {
-    if (objc_getAssociatedObject(self, &RKNativeFilterUpdatingKey)) { %orig; return; }
+    if (objc_getAssociatedObject(self, &RKNativeFilterUpdatingKey)) { %orig;
+ return; }
     if (objc_getAssociatedObject(self, &RKNativeCompositingKey))
         objc_setAssociatedObject(self, &RKNativeCompositingKey,
             @{@"source":filter ?: NSNull.null}, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     %orig;
+
     if (objc_getAssociatedObject(self, &RKNativeKeyOwnerKey)) RKUpdateNativeCompositing((CALayer *)self);
 }
 - (void)setBounds:(CGRect)bounds {
     %orig;
+
     if (objc_getAssociatedObject(self, &RKNativeKeyOwnerKey)) RKUpdateNativeCompositing((CALayer *)self);
 }
-- (void)addSublayer:(CALayer *)layer { %orig; RKPrepareNativeAttachedLayer(layer); }
-- (void)insertSublayer:(CALayer *)layer atIndex:(unsigned int)index { %orig; RKPrepareNativeAttachedLayer(layer); }
-- (void)insertSublayer:(CALayer *)layer below:(CALayer *)sibling { %orig; RKPrepareNativeAttachedLayer(layer); }
-- (void)insertSublayer:(CALayer *)layer above:(CALayer *)sibling { %orig; RKPrepareNativeAttachedLayer(layer); }
-- (void)replaceSublayer:(CALayer *)oldLayer with:(CALayer *)newLayer { %orig; RKPrepareNativeAttachedLayer(newLayer); }
+- (void)addSublayer:(CALayer *)layer { %orig;
+ RKPrepareNativeAttachedLayer(layer); }
+- (void)insertSublayer:(CALayer *)layer atIndex:(unsigned int)index { %orig;
+ RKPrepareNativeAttachedLayer(layer); }
+- (void)insertSublayer:(CALayer *)layer below:(CALayer *)sibling { %orig;
+ RKPrepareNativeAttachedLayer(layer); }
+- (void)insertSublayer:(CALayer *)layer above:(CALayer *)sibling { %orig;
+ RKPrepareNativeAttachedLayer(layer); }
+- (void)replaceSublayer:(CALayer *)oldLayer with:(CALayer *)newLayer { %orig;
+ RKPrepareNativeAttachedLayer(newLayer); }
 - (void)setSublayers:(NSArray *)layers {
     %orig;
+
     for (CALayer *layer in layers) RKPrepareNativeAttachedLayer(layer);
 }
 - (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key {
@@ -1622,12 +1690,14 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKBBackdropView
 - (void)layoutSubviews {
     %orig;
+
     RKUpdateBlackSurface((UIView *)self, YES);
 }
 %end
 %hook UIKeyboardLayoutStar
 - (void)layoutSubviews {
     %orig;
+
     RKUpdateBlackSurface((UIView *)self, NO);
     RKUpdateBlackKeycaps((UIView *)self);
     RKQueueKeyboardFaces((UIView *)self);
@@ -1636,6 +1706,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 %hook UIKeyboardDockView
 - (void)layoutSubviews {
     %orig;
+
     RKUpdateBlackSurface((UIView *)self, NO);
 }
 %end
