@@ -192,9 +192,7 @@ static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^origina
 %group RKTUINative
 %hook TUICandidateLabel
 - (void)drawRect:(CGRect)rect {
-    RKDrawNativeGlyphView((UIView *)self, rect, ^{
-        %orig;
-    });
+    RKDrawNativeGlyphView((UIView *)self, rect, ^{ %orig; });
 }
 %end
 %end
@@ -278,9 +276,7 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook UILabel
 - (void)drawTextInRect:(CGRect)rect {
-    RKDrawCandidate(self, rect, YES, ^{
-        %orig;
-    });
+    RKDrawCandidate(self, rect, YES, ^{ %orig; });
 }
 %end
 
@@ -288,16 +284,11 @@ static void RKWriteNativeDiagnostic(void) {
 %hook UIView
 - (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)context {
     BOOL candidate = RKNativeCandidateRegion(self);
-    if (!candidate) {
-        %orig;
-        return;
-    }
+    if (!candidate) { %orig; return; }
     [RKCandidateViews addObject:self];
     NSUInteger before = RKCandidateRenderCount;
     RKNativeDrawingScope++;
-    @try {
-        %orig;
-    } @finally {
+    @try { %orig; } @finally {
         RKNativeDrawingScope--;
         if (RKCandidateRenderCount != before)
             objc_setAssociatedObject(self, &RKCandidateRenderedKey, @YES, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
@@ -307,78 +298,46 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook NSString
 - (void)drawInRect:(CGRect)rect withAttributes:(NSDictionary *)attributes {
-    if (!RKNativeTextDrawingEnabled()) {
-        %orig;
-        return;
-    }
+    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
     CGSize size = [(NSString *)self boundingRectWithSize:rect.size options:NSStringDrawingUsesLineFragmentOrigin
                                              attributes:attributes context:nil].size;
-    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{
-        %orig;
-    });
+    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ %orig; });
 }
 - (void)drawAtPoint:(CGPoint)point withAttributes:(NSDictionary *)attributes {
-    if (!RKNativeTextDrawingEnabled()) {
-        %orig;
-        return;
-    }
+    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
     CGRect rect = {point, [(NSString *)self sizeWithAttributes:attributes]};
-    RKDrawGradientText(rect, rect, ^{
-        %orig;
-    });
+    RKDrawGradientText(rect, rect, ^{ %orig; });
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options attributes:(NSDictionary *)attributes context:(NSStringDrawingContext *)context {
-    if (!RKNativeTextDrawingEnabled()) {
-        %orig;
-        return;
-    }
+    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
     CGSize size = [(NSString *)self boundingRectWithSize:rect.size options:options attributes:attributes context:context].size;
-    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{
-        %orig;
-    });
+    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ %orig; });
 }
 %end
 
 %hook NSAttributedString
 - (void)drawInRect:(CGRect)rect {
-    if (!RKNativeTextDrawingEnabled()) {
-        %orig;
-        return;
-    }
+    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
     CGSize size = [(NSAttributedString *)self boundingRectWithSize:rect.size
         options:NSStringDrawingUsesLineFragmentOrigin context:nil].size;
-    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{
-        %orig;
-    });
+    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ %orig; });
 }
 - (void)drawAtPoint:(CGPoint)point {
-    if (!RKNativeTextDrawingEnabled()) {
-        %orig;
-        return;
-    }
+    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
     CGRect rect = {point, [(NSAttributedString *)self size]};
-    RKDrawGradientText(rect, rect, ^{
-        %orig;
-    });
+    RKDrawGradientText(rect, rect, ^{ %orig; });
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options context:(NSStringDrawingContext *)context {
-    if (!RKNativeTextDrawingEnabled()) {
-        %orig;
-        return;
-    }
+    if (!RKNativeTextDrawingEnabled()) { %orig; return; }
     CGSize size = [(NSAttributedString *)self boundingRectWithSize:rect.size options:options context:context].size;
-    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{
-        %orig;
-    });
+    RKDrawGradientText(rect, (CGRect){rect.origin, size}, ^{ %orig; });
 }
 %end
 
 // WeType overrides UILabel drawing; keep its existing concrete hook.
 %hook WBTextItemLabel
 - (void)drawTextInRect:(CGRect)rect {
-    RKDrawCandidate((UILabel *)self, rect, NO, ^{
-        %orig;
-    });
+    RKDrawCandidate((UILabel *)self, rect, NO, ^{ %orig; });
 }
 %end
 %ctor {

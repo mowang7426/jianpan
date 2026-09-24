@@ -172,9 +172,7 @@ https://github.com/MTACS/iOS-17-Runtime-Headers
 THEOS="$HOME/theos" gmake -j4 package ARCHS=arm64 THEOS_PACKAGE_SCHEME=rootless FINALPACKAGE=1
 ```
 
-RootHide 必须使用 RootHide 版 Theos，选择 `ARCHS=arm64e THEOS_PACKAGE_ARCH=iphoneos-arm64e THEOS_PACKAGE_SCHEME=roothide`；不要直接把 Rootless 包重命名成 RootHide 包。
-
-GitHub Actions（`.github/workflows/build.yml`）已改为纯 Rootless 构建：macOS runner 上安装 Theos + iPhoneOS16.5 SDK，执行 `ARCHS=arm64 THEOS_PACKAGE_SCHEME=rootless make package FINALPACKAGE=1`，产物为 `build/RainbowKeyboard-rootless.deb`（Actions 页面可下载）。
+RootHide 必须使用 RootHide 版 Theos，选择 `ARCHS=arm64e THEOS_PACKAGE_ARCH=iphoneos-arm64e THEOS_PACKAGE_SCHEME=roothide`；不要直接把 Rootless 包重命名成 RootHide 包。原仓库的双版本 GitHub Actions 流程保留。
 
 ## 验证和边界
 
