@@ -8,9 +8,9 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>彩虹键盘光效</string>
+			<string>彩虹键盘</string>
 			<key>footerText</key>
-			<string>只保留日常使用需要的选项。复杂参数统一放到“高级设置”。</string>
+			<string>常用设置集中在这里。细节参数保留在“高级设置”。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -31,8 +31,6 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>主题</string>
-			<key>footerText</key>
-			<string>主题只控制键盘光效；候选栏渐变保持独立。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -54,7 +52,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>效果</string>
+			<string>按键光效</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -112,6 +110,20 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
+			<string>候选栏</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>label</key>
+			<string>候选栏渐变</string>
+			<key>action</key>
+			<string>showCandidateSettings</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
 			<string>性能</string>
 		</dict>
 		<dict>
@@ -134,99 +146,7 @@
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
-			<string>候选栏渐变</string>
-			<key>footerText</key>
-			<string>保留原有 CandidateStart / CandidateEnd 渐变；新增流动、呼吸、彩虹和跟随输入模式。</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>key</key>
-			<string>CandidateGradient</string>
-			<key>label</key>
-			<string>启用候选栏渐变</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.minis.rainbowkeyboard</string>
-			<key>PostNotification</key>
-			<string>com.minis.rainbowkeyboard.changed</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSLinkCell</string>
-			<key>key</key>
-			<string>CandidateGradientMode</string>
-			<key>action</key>
-			<string>chooseCandidateGradientMode</string>
-			<key>label</key>
-			<string>渐变模式</string>
-			<key>default</key>
-			<integer>1</integer>
-			<key>defaults</key>
-			<string>com.minis.rainbowkeyboard</string>
-			<key>PostNotification</key>
-			<string>com.minis.rainbowkeyboard.changed</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSliderCell</string>
-			<key>key</key>
-			<string>CandidateGradientSpeed</string>
-			<key>label</key>
-			<string>动画速度</string>
-			<key>default</key>
-			<real>0.65</real>
-			<key>min</key>
-			<real>0.05</real>
-			<key>max</key>
-			<real>2.0</real>
-			<key>showValue</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.minis.rainbowkeyboard</string>
-			<key>PostNotification</key>
-			<string>com.minis.rainbowkeyboard.changed</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSliderCell</string>
-			<key>key</key>
-			<string>CandidateGradientIntensity</string>
-			<key>label</key>
-			<string>渐变强度</string>
-			<key>default</key>
-			<real>1.0</real>
-			<key>min</key>
-			<real>0.1</real>
-			<key>max</key>
-			<real>1.0</real>
-			<key>showValue</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.minis.rainbowkeyboard</string>
-			<key>PostNotification</key>
-			<string>com.minis.rainbowkeyboard.changed</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSGroupCell</string>
-			<key>label</key>
-			<string>其他</string>
-		</dict>
-		<dict>
-			<key>cell</key>
-			<string>PSSwitchCell</string>
-			<key>key</key>
-			<string>CandidateGradient</string>
-			<key>label</key>
-			<string>候选栏渐变</string>
-			<key>default</key>
-			<true/>
-			<key>defaults</key>
-			<string>com.minis.rainbowkeyboard</string>
-			<key>PostNotification</key>
-			<string>com.minis.rainbowkeyboard.changed</string>
+			<string>更多</string>
 		</dict>
 		<dict>
 			<key>cell</key>
