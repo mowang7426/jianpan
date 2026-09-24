@@ -5,6 +5,7 @@
 #import <math.h>
 #import "RKPreferences.h"
 #import "RKThemeEngine.h"
+#import "RKAdaptivePerformance.h"
 static NSDictionary *RKReadPreferences(void) {
     return RKThemeMergedPreferences(RKReadEffectivePreferences());
 }
@@ -51,13 +52,25 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     NSDictionary *newConfig = RKReadPreferences();
     if (!newConfig) newConfig = @{};
     self.config = newConfig;
+    RKAdaptiveSetEnabled(!newConfig[@"SmartPerformance"] || [newConfig[@"SmartPerformance"] boolValue]);
 }
 - (CGFloat)number:(NSString *)key fallback:(CGFloat)fallback low:(CGFloat)low high:(CGFloat)high {
     id x = self.config[key];
     CGFloat v = [x respondsToSelector:@selector(doubleValue)] ? [x doubleValue] : fallback;
-    return isfinite(v) ? MIN(high,MAX(low,v)) : fallback;
+    CGFloat result = isfinite(v) ? MIN(high,MAX(low,v)) : fallback;
+    NSInteger level = RKAdaptiveLevel();
+    if (level) {
+        if ([key isEqualToString:@"MaxEffects"]) result = MIN(result, level == 1 ? 2 : 1);
+        if ([key isEqualToString:@"Duration"] || [key isEqualToString:@"BackgroundDuration"])
+            result = MIN(result, level == 1 ? 0.35 : 0.22);
+        if ([key isEqualToString:@"BackgroundRadius"]) result = MIN(result, 110);
+    }
+    return result;
 }
-- (BOOL)flag:(NSString *)key { return !self.config[key] || [self.config[key] boolValue]; }
+- (BOOL)flag:(NSString *)key {
+    if (RKAdaptiveLevel() && ([key isEqualToString:@"AmbientGlow"] || [key isEqualToString:@"BackgroundFeedback"])) return NO;
+    return !self.config[key] || [self.config[key] boolValue];
+}
 - (CGFloat)neonSaturation:(CGFloat)base {
     return base * [self number:@"NeonSaturation" fallback:.72 low:0 high:1];
 }
@@ -263,13 +276,19 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 - (void)showRippleAtPoint:(CGPoint)point sourceView:(UIView *)sourceView {
     // Configuration is cached and invalidated by the settings Darwin notification.
     // Do not perform preference/transport checks on every key press.
+    // Sample even when press effects are off but candidate effects remain on.
+    if (self.window && !self.hidden) RKAdaptiveNoteInput();
     NSString *bid = NSBundle.mainBundle.bundleIdentifier.lowercaseString ?: @"";
     BOOL weType = [bid containsString:@"wetype"];
     if (![self flag:@"Enabled"] || ![self flag:@"RippleEnabled"] || ![self flag:weType ? @"WeChatKeyboard" : @"NativeKeyboard"]) {
         for (CALayer *l in self.layer.sublayers.copy) [l removeFromSuperlayer];
         return;
     }
+    if (!self.window || self.hidden) return;
+    NSInteger adaptiveLevel = RKAdaptiveLevel();
     NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:2];
+    // Severe pressure: use a bounded single-key effect instead of whole-keyboard waves.
+    if (adaptiveLevel >= 2) style = 2;
     if (style != self.lastStyle) {
         for (CALayer *layer in self.layer.sublayers.copy) [layer removeFromSuperlayer];
         self.lastStyle = style;
