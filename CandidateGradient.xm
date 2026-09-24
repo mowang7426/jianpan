@@ -5,6 +5,9 @@
 #import <os/lock.h>
 #import "RKPreferences.h"
 
+// Forward declaration: used by RKCandidateAnimatorProxy before its implementation.
+static NSInteger RKCandidateGradientMode(void);
+
 static NSHashTable<UIView *> *RKCandidateViews;
 static CADisplayLink *RKCandidateDisplayLink;
 static CFTimeInterval RKCandidatePhaseStart;
