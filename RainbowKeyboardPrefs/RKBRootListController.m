@@ -105,7 +105,8 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 @property(nonatomic, copy) NSString *editingColorKey;
 @end
 
-@interface RKBRootListController : PSListController
+@interface RKBRootListController : PSListController <UIColorPickerViewControllerDelegate>
+@property(nonatomic, copy) NSString *editingColorKey;
 @end
 
 @interface RKBCandidateListController : RKBRootListController
@@ -258,6 +259,53 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
     return cell;
 }
 
+
+- (void)chooseCandidateColor:(NSString *)key {
+    self.editingColorKey = key;
+    UIColorPickerViewController *picker = [UIColorPickerViewController new];
+    picker.delegate = self;
+    picker.supportsAlpha = NO;
+
+    NSDictionary *titles = @{
+        @"CandidateStart": @"候选词起始颜色",
+        @"CandidateEnd": @"候选词结束颜色"
+    };
+    picker.title = titles[key];
+
+    id rgb = RKReadPreferences()[key];
+    if ([rgb isKindOfClass:NSArray.class] && [rgb count] == 3) {
+        picker.selectedColor = [UIColor colorWithRed:[rgb[0] doubleValue]
+                                                 green:[rgb[1] doubleValue]
+                                                  blue:[rgb[2] doubleValue]
+                                                 alpha:1.0];
+    }
+    [self presentViewController:picker animated:YES completion:nil];
+}
+
+- (void)chooseCandidateStart { [self chooseCandidateColor:@"CandidateStart"]; }
+- (void)chooseCandidateEnd { [self chooseCandidateColor:@"CandidateEnd"]; }
+
+- (void)saveCandidatePickerColor:(UIColor *)color {
+    if (!color || !self.editingColorKey.length) return;
+    CGFloat r = 0, g = 0, b = 0, a = 1;
+    if (![color getRed:&r green:&g blue:&b alpha:&a]) return;
+
+    NSMutableDictionary *values = [RKReadPreferences() mutableCopy] ?: [NSMutableDictionary dictionary];
+    values[self.editingColorKey] = @[@(r), @(g), @(b)];
+    values[@"Preset"] = @(-1);
+    RKSaveAndNotify(values);
+}
+
+- (void)colorPickerViewControllerDidSelectColor:(UIColorPickerViewController *)picker {
+    [self saveCandidatePickerColor:picker.selectedColor];
+}
+
+- (void)colorPickerViewControllerDidFinish:(UIColorPickerViewController *)picker {
+    [self saveCandidatePickerColor:picker.selectedColor];
+    self.editingColorKey = nil;
+    [self reloadSpecifiers];
+}
+
 - (void)showCandidateSettings {
     RKBCandidateListController *controller = [RKBCandidateListController new];
     [self.navigationController pushViewController:controller animated:YES];
@@ -293,7 +341,13 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 
 - (NSMutableArray *)specifiers {
     if (!_specifiers) {
-        _specifiers = [self loadSpecifiersFromPlistName:@"RainbowKeyboardAdvanced" target:self];
+        NSMutableArray *loaded = [[self loadSpecifiersFromPlistName:@"RainbowKeyboardAdvanced" target:self] mutableCopy];
+        NSIndexSet *remove = [loaded indexesOfObjectsPassingTest:^BOOL(PSSpecifier *specifier, NSUInteger idx, BOOL *stop) {
+            NSString *key = [specifier propertyForKey:@"key"];
+            return [key isEqualToString:@"CandidateStart"] || [key isEqualToString:@"CandidateEnd"];
+        }];
+        if (remove.count) [loaded removeObjectsAtIndexes:remove];
+        _specifiers = loaded;
     }
     return _specifiers;
 }
@@ -344,8 +398,6 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
     [self presentViewController:picker animated:YES completion:nil];
 }
 
-- (void)chooseCandidateStart { [self chooseColor:@"CandidateStart"]; }
-- (void)chooseCandidateEnd { [self chooseColor:@"CandidateEnd"]; }
 - (void)chooseKeyboardBackground { [self chooseColor:@"KeyboardBackgroundColor"]; }
 - (void)chooseKeycapColor { [self chooseColor:@"KeycapColor"]; }
 - (void)choosePressColor { [self chooseColor:@"PressColor"]; }
@@ -402,14 +454,132 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 
 - (NSMutableArray *)specifiers {
     if (!_specifiers) {
-        _specifiers = [self loadSpecifiersFromPlistName:@"RainbowKeyboardCandidate" target:self];
+        NSMutableArray *items = [NSMutableArray array];
+
+        PSSpecifier *group = [PSSpecifier preferenceSpecifierNamed:@"候选词渐变"
+                                                               target:self
+                                                                  set:nil
+                                                                  get:nil
+                                                               detail:nil
+                                                                 cell:PSGroupCell
+                                                                 edit:nil];
+        [items addObject:group];
+
+        PSSpecifier *enabled = [PSSpecifier preferenceSpecifierNamed:@"启用候选词渐变"
+                                                                target:self
+                                                                   set:@selector(setPreferenceValue:specifier:)
+                                                                   get:@selector(readPreferenceValue:)
+                                                                detail:nil
+                                                                  cell:PSSwitchCell
+                                                                  edit:nil];
+        [enabled setProperty:@"CandidateGradient" forKey:@"key"];
+        [enabled setProperty:@YES forKey:@"default"];
+        [enabled setProperty:@"com.minis.rainbowkeyboard" forKey:@"defaults"];
+        [enabled setProperty:kRKChangedNotification forKey:@"PostNotification"];
+        [items addObject:enabled];
+
+        PSSpecifier *mode = [PSSpecifier preferenceSpecifierNamed:@"渐变模式"
+                                                            target:self
+                                                               set:nil
+                                                               get:nil
+                                                            detail:nil
+                                                              cell:PSLinkCell
+                                                              edit:nil];
+        [mode setProperty:@"CandidateGradientMode" forKey:@"key"];
+        [mode setProperty:@"chooseCandidateGradientMode" forKey:@"action"];
+        [items addObject:mode];
+
+        PSSpecifier *colorGroup = [PSSpecifier preferenceSpecifierNamed:@"候选词颜色"
+                                                                  target:self
+                                                                     set:nil
+                                                                     get:nil
+                                                                  detail:nil
+                                                                    cell:PSGroupCell
+                                                                    edit:nil];
+        [items addObject:colorGroup];
+
+        PSSpecifier *start = [PSSpecifier preferenceSpecifierNamed:@"起始颜色"
+                                                             target:self
+                                                                set:nil
+                                                                get:nil
+                                                             detail:nil
+                                                               cell:PSLinkCell
+                                                               edit:nil];
+        [start setProperty:@"chooseCandidateStart" forKey:@"action"];
+        [items addObject:start];
+
+        PSSpecifier *end = [PSSpecifier preferenceSpecifierNamed:@"结束颜色"
+                                                           target:self
+                                                              set:nil
+                                                              get:nil
+                                                           detail:nil
+                                                             cell:PSLinkCell
+                                                             edit:nil];
+        [end setProperty:@"chooseCandidateEnd" forKey:@"action"];
+        [items addObject:end];
+
+        PSSpecifier *inputGroup = [PSSpecifier preferenceSpecifierNamed:@"输入法"
+                                                                   target:self
+                                                                      set:nil
+                                                                      get:nil
+                                                                   detail:nil
+                                                                     cell:PSGroupCell
+                                                                     edit:nil];
+        [items addObject:inputGroup];
+
+        PSSpecifier *native = [PSSpecifier preferenceSpecifierNamed:@"原生候选栏"
+                                                               target:self
+                                                                  set:@selector(setPreferenceValue:specifier:)
+                                                                  get:@selector(readPreferenceValue:)
+                                                               detail:nil
+                                                                 cell:PSSwitchCell
+                                                                 edit:nil];
+        [native setProperty:@"CandidateNative" forKey:@"key"];
+        [native setProperty:@YES forKey:@"default"];
+        [items addObject:native];
+
+        PSSpecifier *wetype = [PSSpecifier preferenceSpecifierNamed:@"WeType 候选栏"
+                                                               target:self
+                                                                  set:@selector(setPreferenceValue:specifier:)
+                                                                  get:@selector(readPreferenceValue:)
+                                                               detail:nil
+                                                                 cell:PSSwitchCell
+                                                                 edit:nil];
+        [wetype setProperty:@"CandidateWeType" forKey:@"key"];
+        [wetype setProperty:@YES forKey:@"default"];
+        [items addObject:wetype];
+
+        PSSpecifier *animationGroup = [PSSpecifier preferenceSpecifierNamed:@"动画"
+                                                                       target:self
+                                                                          set:nil
+                                                                          get:nil
+                                                                       detail:nil
+                                                                         cell:PSGroupCell
+                                                                         edit:nil];
+        [items addObject:animationGroup];
+
+        PSSpecifier *speed = [PSSpecifier preferenceSpecifierNamed:@"动画速度"
+                                                              target:self
+                                                                 set:@selector(setPreferenceValue:specifier:)
+                                                                 get:@selector(readPreferenceValue:)
+                                                              detail:nil
+                                                                cell:PSSliderCell
+                                                                edit:nil];
+        [speed setProperty:@"CandidateGradientSpeed" forKey:@"key"];
+        [speed setProperty:@0.5 forKey:@"default"];
+        [speed setProperty:@0.05 forKey:@"min"];
+        [speed setProperty:@2.0 forKey:@"max"];
+        [speed setProperty:@YES forKey:@"showValue"];
+        [items addObject:speed];
+
+        _specifiers = items;
     }
     return _specifiers;
 }
 
 - (void)viewDidLoad {
     [super viewDidLoad];
-    self.title = @"候选栏";
+    self.title = @"候选栏渐变";
 }
 
 @end
