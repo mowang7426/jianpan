@@ -44,17 +44,29 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
             NSValue *oldBoundsValue = objc_getAssociatedObject(liveHost, &RKOverlayBoundsKey);
             BOOL geometryChanged = !oldBoundsValue ||
                 !CGRectEqualToRect(oldBoundsValue.CGRectValue, liveHost.bounds);
-            if (geometryChanged) {
+
+            // Keyboard layouts can change (9-key <-> 26-key, alphabetic <->
+            // numeric, etc.) without changing the host bounds. The old code
+            // only refreshed keyFrames when bounds changed, so a 26-key layout
+            // could keep the previous 9-key geometry and render the old two-key
+            // block/ripple shape. Refresh the key geometry whenever the live
+            // key-frame set differs, while keeping the expensive exclusion mask
+            // tied to bounds changes.
+            NSArray<NSValue *> *liveKeyFrames = RKKeyboardKeyFrames(liveHost);
+            BOOL keyGeometryChanged = ![effect.keyFrames isEqualToArray:liveKeyFrames];
+            if (geometryChanged || keyGeometryChanged) {
                 effect.frame = liveHost.bounds;
                 [liveHost bringSubviewToFront:effect];
-                UIBezierPath *visible = [UIBezierPath bezierPathWithRect:effect.bounds];
-                RKCollectExclusions(liveHost, liveHost, visible, 0);
-                CAShapeLayer *mask = [CAShapeLayer layer];
-                mask.frame = effect.bounds;
-                mask.path = visible.CGPath;
-                mask.fillRule = kCAFillRuleEvenOdd;
-                effect.layer.mask = mask;
-                effect.keyFrames = RKKeyboardKeyFrames(liveHost);
+                if (geometryChanged) {
+                    UIBezierPath *visible = [UIBezierPath bezierPathWithRect:effect.bounds];
+                    RKCollectExclusions(liveHost, liveHost, visible, 0);
+                    CAShapeLayer *mask = [CAShapeLayer layer];
+                    mask.frame = effect.bounds;
+                    mask.path = visible.CGPath;
+                    mask.fillRule = kCAFillRuleEvenOdd;
+                    effect.layer.mask = mask;
+                }
+                effect.keyFrames = liveKeyFrames;
                 objc_setAssociatedObject(liveHost, &RKOverlayBoundsKey,
                     [NSValue valueWithCGRect:liveHost.bounds], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             }
