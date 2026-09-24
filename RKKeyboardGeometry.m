@@ -153,7 +153,9 @@ static NSMethodSignature *RKGetterSignature(Class cls, NSString *name, const cha
 
 // Private selectors vary by OS release. Validate their ABI before invoking them.
 static NSInvocation *RKGetter(id object, NSString *name, const char *type) {
-    NSMethodSignature *signature = RKGetterSignature(object.class, name, type);
+    // 注意：不能用点语法 object.class —— id 类型上编译器会做属性查找而报错；
+    // 消息发送 [object class] 对 id 永远合法且语义一致。
+    NSMethodSignature *signature = RKGetterSignature([object class], name, type);
     if (!signature) return nil;
     NSInvocation *call = [NSInvocation invocationWithMethodSignature:signature];
     call.target = object;
