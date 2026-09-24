@@ -1,13 +1,13 @@
-RainbowKeyboard Performance V1 - direct replacement files
+RainbowKeyboard Theme/Candidate V1.1 compile fix
 
-These files match the paths in the original houxuan-main-samsung171-source.tar.gz:
+Fix:
+- Removed unused RKRGB() helper from RKThemeEngine.m.
+- This fixes clang -Werror -Wunused-function reported by Theos.
 
-1. Tweak.xm -> replace original ./Tweak.xm
-2. RainbowEffectView.m -> replace original ./RainbowEffectView.m
-3. RKNeonPress.m -> replace original ./RKNeonPress.m
+Replace only:
+RKThemeEngine.m
 
-Do NOT create or look for a RainbowKeyboard folder or patches folder.
-Do NOT replace RKBRootListController.m or any plist for this performance test.
+Path:
+Your RainbowKeyboard project root/RKThemeEngine.m
 
-This version targets the input/ripple path: avoids per-key preference reloads,
-caches keyboard geometry paths, and caches expensive Neon foreground extraction.
+Do not replace Tweak.xm, RainbowEffectView.m, RKNeonPress.m, or any plist for this compile fix.

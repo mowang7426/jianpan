@@ -1,5 +1,4 @@
 #import "RKThemeEngine.h"
-static NSArray *RKRGB(CGFloat r, CGFloat g, CGFloat b) { return @[@(r), @(g), @(b)]; }
 static NSDictionary *RKTheme(NSString *name, CGFloat sat, CGFloat bright, CGFloat opacity, CGFloat spread, CGFloat softness, CGFloat core, CGFloat bgStrength, CGFloat bgRadius, CGFloat bgBand, NSInteger colorMode, CGFloat hue) {
     return @{@"name":name, @"NeonSaturation":@(sat), @"Brightness":@(bright), @"Opacity":@(opacity),
              @"Spread":@(spread), @"Softness":@(softness), @"CoreStrength":@(core), @"BackgroundStrength":@(bgStrength),
