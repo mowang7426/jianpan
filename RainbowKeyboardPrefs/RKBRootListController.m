@@ -151,6 +151,91 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
     [self reloadSpecifiers];
 }
 
+- (void)saveSimpleValue:(id)value forKey:(NSString *)key {
+    if (!key || !value) return;
+    NSMutableDictionary *values = [RKReadPreferences() mutableCopy] ?: [NSMutableDictionary dictionary];
+    values[key] = value;
+    values[@"Preset"] = @(-1);
+    RKSaveAndNotify(values);
+    [self reloadSpecifiers];
+}
+
+- (void)chooseSimpleOptionForKey:(NSString *)key
+                           title:(NSString *)title
+                         options:(NSArray<NSString *> *)options
+                          values:(NSArray<NSNumber *> *)values {
+    NSInteger current = [RKReadPreferences()[key] integerValue];
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:title
+                                                                     message:nil
+                                                              preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSUInteger i = 0; i < options.count && i < values.count; i++) {
+        NSString *option = options[i];
+        NSNumber *optionValue = values[i];
+        NSString *buttonTitle = [optionValue integerValue] == current ? [NSString stringWithFormat:@"✓ %@", option] : option;
+        [alert addAction:[UIAlertAction actionWithTitle:buttonTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            [self saveSimpleValue:optionValue forKey:key];
+        }]];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (void)chooseEffectStyle {
+    [self chooseSimpleOptionForKey:@"EffectStyle"
+                             title:@"光效风格"
+                           options:@[@"波纹", @"扩散", @"轻弹"]
+                            values:@[@0, @1, @2]];
+}
+
+- (void)chooseColorMode {
+    [self chooseSimpleOptionForKey:@"ColorMode"
+                             title:@"光效颜色"
+                           options:@[@"彩虹", @"固定颜色", @"横向渐变"]
+                            values:@[@0, @1, @2]];
+}
+
+- (void)choosePerformanceMode {
+    NSInteger current = [RKReadPreferences()[@"PerformanceMode"] integerValue];
+    if (!RKReadPreferences()[@"PerformanceMode"]) current = 1;
+    UIAlertController *alert = [UIAlertController alertControllerWithTitle:@"性能模式"
+                                                                     message:@"选择后会自动调整光效数量、持续时间和背景效果。"
+                                                              preferredStyle:UIAlertControllerStyleActionSheet];
+    NSArray *titles = @[@"省电", @"平衡", @"高性能"];
+    for (NSInteger i = 0; i < (NSInteger)titles.count; i++) {
+        NSString *name = titles[i];
+        NSString *buttonTitle = i == current ? [NSString stringWithFormat:@"✓ %@", name] : name;
+        [alert addAction:[UIAlertAction actionWithTitle:buttonTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            NSMutableDictionary *values = [RKReadPreferences() mutableCopy] ?: [NSMutableDictionary dictionary];
+            RKApplyPerformancePreset(values, i);
+            RKSaveAndNotify(values);
+            [self reloadSpecifiers];
+        }]];
+    }
+    [alert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:alert animated:YES completion:nil];
+}
+
+- (UITableViewCell *)tableView:(UITableView *)tableView cellForRowAtIndexPath:(NSIndexPath *)indexPath {
+    UITableViewCell *cell = [super tableView:tableView cellForRowAtIndexPath:indexPath];
+    PSSpecifier *specifier = [self specifierAtIndexPath:indexPath];
+    NSString *key = [specifier propertyForKey:@"key"];
+    if ([key isEqualToString:@"EffectStyle"]) {
+        NSArray *titles = @[@"波纹", @"扩散", @"轻弹"];
+        NSInteger value = [RKReadPreferences()[key] integerValue];
+        cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"波纹";
+    } else if ([key isEqualToString:@"ColorMode"]) {
+        NSArray *titles = @[@"彩虹", @"固定颜色", @"横向渐变"];
+        NSInteger value = [RKReadPreferences()[key] integerValue];
+        cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"彩虹";
+    } else if ([key isEqualToString:@"PerformanceMode"]) {
+        NSArray *titles = @[@"省电", @"平衡", @"高性能"];
+        NSInteger value = [RKReadPreferences()[key] integerValue];
+        if (!RKReadPreferences()[key]) value = 1;
+        cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"平衡";
+    }
+    return cell;
+}
+
 - (void)showAdvanced {
     RKBAdvancedListController *controller = [RKBAdvancedListController new];
     [self.navigationController pushViewController:controller animated:YES];
