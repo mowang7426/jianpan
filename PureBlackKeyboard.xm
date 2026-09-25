@@ -1250,7 +1250,10 @@ void RKApplyBlackKeyboardHost(UIView *host) {
     if (RKKeyboardSessionActive()) RKPrepareAttachedKeyLayer(subview.layer);
 }
 - (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)context {
-    if (!RKKeyboardSessionActive()) { %orig(layer, context); return; }
+    if (!RKKeyboardSessionActive()) {
+        %orig(layer, context);
+        return;
+    }
     RKDrawBlackKeyLayer((UIView *)self, layer, context, ^(CGContextRef drawing) {
         %orig(layer, drawing);
     });
@@ -1365,7 +1368,10 @@ void RKApplyBlackKeyboardHost(UIView *host) {
     for (CALayer *layer in layers) RKPrepareAttachedKeyLayer(layer);
 }
 - (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key {
-    if (!RKKeyboardSessionActive()) { %orig(animation, key); return; }
+    if (!RKKeyboardSessionActive()) {
+        %orig(animation, key);
+        return;
+    }
     if (RKBlackKeyRoot((CALayer *)self)) {
         CAAnimation *filtered = RKKeyColorAnimation((CALayer *)self, animation);
         if (!filtered) return;
@@ -1376,7 +1382,10 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 
 }
 - (void)setHidden:(BOOL)hidden {
-    if (!RKKeyboardSessionActive()) { %orig(hidden); return; }
+    if (!RKKeyboardSessionActive()) {
+        %orig(hidden);
+        return;
+    }
     if (objc_getAssociatedObject(self, &RKBlackHidingKey)) { %orig;
  return; }
     NSNumber *original = objc_getAssociatedObject(self, &RKBlackHiddenKey);
@@ -1712,7 +1721,10 @@ void RKApplyBlackKeyboardHost(UIView *host) {
     for (CALayer *layer in layers) RKPrepareNativeAttachedLayer(layer);
 }
 - (void)addAnimation:(CAAnimation *)animation forKey:(NSString *)key {
-    if (!RKKeyboardSessionActive()) { %orig(animation, key); return; }
+    if (!RKKeyboardSessionActive()) {
+        %orig(animation, key);
+        return;
+    }
     CAAnimation *filtered = RKNativeBlendAnimation((CALayer *)self, animation);
     if (filtered) %orig(filtered, key);
 }

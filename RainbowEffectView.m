@@ -315,7 +315,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Tweak.xm still coalesces/throttles decoration work to protect typing.
     [self.fastFeedback removeAllAnimations];
     [self.fastFeedback removeFromSuperlayer];
-    NSInteger adaptiveLevel = RKAdaptiveLevel();
     NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:2];
     // Keep the user's original configured style; adaptive mode only reduces work.
     if (style != self.lastStyle) {

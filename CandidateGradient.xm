@@ -374,7 +374,10 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook UILabel
 - (void)drawTextInRect:(CGRect)rect {
-    if (!RKKeyboardSessionActive()) { %orig; return; }
+    if (!RKKeyboardSessionActive()) {
+        %orig;
+        return;
+    }
     RKDrawCandidate(self, rect, YES, ^{ 
         %orig;
  });
@@ -384,7 +387,10 @@ static void RKWriteNativeDiagnostic(void) {
 // Scope custom string drawing to native candidate views. Never tint their backgrounds.
 %hook UIView
 - (void)drawLayer:(CALayer *)layer inContext:(CGContextRef)context {
-    if (!RKKeyboardSessionActive()) { %orig(layer, context); return; }
+    if (!RKKeyboardSessionActive()) {
+        %orig(layer, context);
+        return;
+    }
     BOOL candidate = RKNativeCandidateRegion(self);
     if (!candidate) { 
         %orig;
