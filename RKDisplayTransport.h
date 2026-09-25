@@ -22,7 +22,7 @@ static inline NSArray<NSString *> *RKDisplayColors(void) {
 static inline NSArray<NSString *> *RKDisplayKeys(void) {
     return [[[RKDisplayNumbers() arrayByAddingObjectsFromArray:RKDisplayFlags()]
         arrayByAddingObjectsFromArray:RKDisplayColors()]
-        arrayByAddingObjectsFromArray:@[@"PressColorMode", @"PressBrightness", @"PressColor", @"Theme", @"SmartPerformance"]];
+        arrayByAddingObjectsFromArray:@[@"PressColorMode", @"PressBrightness", @"PressColor", @"Theme", @"SmartPerformance", @"KeyboardLock"]];
 }
 static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[RKDisplayWordCount]) {
     memset(words, 0, RKDisplayWordCount * sizeof(uint64_t));
@@ -66,6 +66,11 @@ static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[R
     if ([smart isKindOfClass:NSNumber.class]) {
         words[1] |= UINT64_C(1) << 50;
         if ([smart boolValue]) words[1] |= UINT64_C(1) << 51;
+    }
+    id lock = prefs[@"KeyboardLock"];
+    if ([lock isKindOfClass:NSNumber.class]) {
+        words[1] |= UINT64_C(1) << 52;
+        if ([lock boolValue]) words[1] |= UINT64_C(1) << 53;
     }
     id theme = prefs[@"Theme"];
     if ([theme isKindOfClass:NSNumber.class] && isfinite([theme doubleValue]) &&
@@ -131,6 +136,8 @@ static inline NSDictionary *RKDecodeDisplaySnapshot(const uint64_t words[RKDispl
     for (NSUInteger i = 0; i < flags.count; i++)
         if (words[1] & (UINT64_C(1) << (21 + i))) result[flags[i]] = @((words[1] >> (31 + i)) & 1);
     if (words[1] & (UINT64_C(1) << 50)) result[@"SmartPerformance"] = @((words[1] >> 51) & 1);
+    if (words[1] & (UINT64_C(1) << 52)) result[@"KeyboardLock"] = @((words[1] >> 53) & 1);
+
     if (words[1] & (UINT64_C(1) << 45)) {
         NSUInteger theme = (words[1] >> 46) & 15;
         if (theme > 9) return nil;

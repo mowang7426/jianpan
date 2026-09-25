@@ -1,5 +1,6 @@
 #import "RKKeyboardGeometry.h"
 #import "RainbowEffectView.h"
+#import "RKPreferences.h"
 #import <objc/runtime.h>
 #import <math.h>
 
@@ -44,8 +45,16 @@ NSUInteger RKClassFeatures(Class cls) {
 
 #pragma mark - 键盘会话状态（P0-3：全局钩子快速短路开关）
 
+static BOOL RKKeyboardLockEnabled(void) {
+    NSDictionary *prefs = RKReadEffectivePreferences();
+    return [prefs[@"KeyboardLock"] boolValue];
+}
+
 static BOOL RKKeyboardSessionActiveValue;
-void RKKeyboardSessionSetActive(BOOL active) { RKKeyboardSessionActiveValue = active; }
+void RKKeyboardSessionSetActive(BOOL active) {
+    if (!active && RKKeyboardLockEnabled()) return;
+    RKKeyboardSessionActiveValue = active;
+}
 BOOL RKKeyboardSessionActive(void) { return RKKeyboardSessionActiveValue; }
 
 // addObserverForName 返回的 observer token 必须被持有，否则 ARC 下立即释放、

@@ -311,58 +311,13 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         return;
     }
     if (!self.window || self.hidden) return;
-    if (RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2) {
-        CGRect pressed = CGRectNull;
-        for (NSValue *value in self.keyFrames) {
-            if (CGRectContainsPoint(value.CGRectValue, point)) { pressed = value.CGRectValue; break; }
-        }
-        if (CGRectIsNull(pressed)) return;
-        if (!self.fastFeedback) {
-            self.fastFeedback = [CALayer layer];
-            self.fastFeedback.name = @"RKFastInputFeedback";
-            self.fastFeedback.cornerRadius = 5;
-        }
-        for (CALayer *layer in self.layer.sublayers.copy)
-            if (layer != self.fastFeedback) [layer removeFromSuperlayer];
-        if (self.fastFeedback.superlayer != self.layer) [self.layer addSublayer:self.fastFeedback];
-        NSInteger theme = [self.config[@"Theme"] integerValue];
-        BOOL preset = theme >= 1 && theme <= 9;
-        BOOL fixed = [self number:@"ColorMode" fallback:0 low:0 high:2] == 1;
-        self.pressHue = fmod(self.pressHue + .38196601125, 1);
-        CGFloat hue = fixed ? [self number:@"Hue" fallback:.55 low:0 high:1] : self.pressHue;
-        UIColor *color = (!preset && [self number:@"PressColorMode" fallback:0 low:0 high:1] == 1)
-            ? RKKeyboardColor(self.config, @"PressColor")
-            : [UIColor colorWithHue:hue saturation:[self neonSaturation:1] brightness:1 alpha:1];
-        CGFloat bright = [self number:preset ? @"Brightness" : @"PressBrightness" fallback:1 low:0 high:1];
-        [CATransaction begin];
-        [CATransaction setDisableActions:YES];
-        self.fastFeedback.frame = CGRectInset(pressed, 2, 2);
-        self.fastFeedback.backgroundColor = color.CGColor;
-        self.fastFeedback.opacity = 0;
-        [CATransaction commit];
-        // Replace existing animations, never accumulate springs or cleanup blocks.
-        [self.fastFeedback removeAllAnimations];
-        if (!UIAccessibilityIsReduceMotionEnabled()) {
-            CAKeyframeAnimation *bounce = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
-            bounce.values = @[@.94, @1.015, @1];
-            bounce.keyTimes = @[@0, @.55, @1];
-            bounce.duration = .16;
-            bounce.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-            [self.fastFeedback addAnimation:bounce forKey:@"fastBounce"];
-        }
-        CABasicAnimation *fade = [CABasicAnimation animationWithKeyPath:@"opacity"];
-        fade.fromValue = @(.32 * bright);
-        fade.toValue = @0;
-        fade.duration = .18;
-        [self.fastFeedback addAnimation:fade forKey:@"fastFade"];
-        return;
-    }
+    // Keep the original wave/ripple appearance during fast input too.
+    // Tweak.xm still coalesces/throttles decoration work to protect typing.
     [self.fastFeedback removeAllAnimations];
     [self.fastFeedback removeFromSuperlayer];
     NSInteger adaptiveLevel = RKAdaptiveLevel();
     NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:2];
-    // Severe pressure: use a bounded single-key effect instead of whole-keyboard waves.
-    if (adaptiveLevel >= 2) style = 2;
+    // Keep the user's original configured style; adaptive mode only reduces work.
     if (style != self.lastStyle) {
         for (CALayer *layer in self.layer.sublayers.copy) [layer removeFromSuperlayer];
         self.lastStyle = style;
