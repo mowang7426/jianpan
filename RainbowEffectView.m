@@ -262,10 +262,10 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     CGFloat duration = MIN(.75,MAX(.42,[self number:@"Duration" fallback:.55 low:.15 high:1.2]));
     if (fast) { duration = .38; reach = MIN(reach,145); }
     if (style == 0) {
-        // Water-drop mode: compact reach and slow, even radial motion.
-        // Fast input drops the second front instead of speeding up the first.
-        reach = MIN(105,MAX(65,pressed.size.width*.85));
-        duration = .95;
+        // Broad ocean swells: wider reach, but slower than the small ripples.
+        // Keep the same bounded pulse count and skip the trailing front when busy.
+        reach = MIN(165,MAX(125,pressed.size.width*1.4));
+        duration = 1.35;
     }
     if (reduce) reach = 32;
     CGPoint origin = CGPointMake(CGRectGetMidX(pressed),CGRectGetMaxY(pressed)+1);
@@ -279,36 +279,40 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     [self.layer addSublayer:pulse];
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     if (style == 0) {
-        // Two restrained water ripples; the trailing ripple is weaker.
+        // A broad body, bright shoulder and crisp foam crest, followed by a weaker swell.
         NSUInteger fronts = fast || reduce ? 1 : 2;
         for (NSUInteger i = 0; i < fronts; i++) {
-            for (NSUInteger pass = 0; pass < 2; pass++) {
+            for (NSUInteger pass = 0; pass < 3; pass++) {
                 CAShapeLayer *ring = [CAShapeLayer layer];
                 ring.frame = self.bounds;
                 ring.bounds = self.bounds;
                 ring.contentsScale = self.window.screen.scale;
                 ring.fillColor = UIColor.clearColor.CGColor;
-                ring.strokeColor = [color colorWithAlphaComponent:(pass ? 1 : .22) * (i ? .72 : 1)].CGColor;
-                ring.lineWidth = pass ? 3.8 : 7;
+                UIColor *crest = [UIColor colorWithHue:hue
+                    saturation:[self neonSaturation:.35] brightness:brightness alpha:1];
+                UIColor *tint = pass == 2 ? crest : color;
+                CGFloat layerAlpha = pass == 0 ? .38 : (pass == 1 ? .9 : 1);
+                ring.strokeColor = [tint colorWithAlphaComponent:layerAlpha*(i ? .8 : 1)].CGColor;
+                ring.lineWidth = pass == 0 ? 28 : (pass == 1 ? 14 : 3.5);
                 ring.opacity = 0;
-                CGFloat initial = reduce ? 26 : 3;
+                CGFloat initial = reduce ? 26 : 8;
                 UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
                 UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-reach,origin.y-reach,reach*2,reach*2)];
                 ring.path = end.CGPath;
                 [pulse addSublayer:ring];
-                CFTimeInterval begin = now + i*duration*.22;
+                CFTimeInterval begin = now + i*duration*.25;
                 if (!reduce) {
                     CABasicAnimation *expand = [CABasicAnimation animationWithKeyPath:@"path"];
                     expand.fromValue = (__bridge id)start.CGPath;
                     expand.toValue = (__bridge id)end.CGPath;
                     expand.beginTime = begin;
-                    expand.duration = duration*.78;
+                    expand.duration = duration*.75;
                     expand.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
                     [ring addAnimation:expand forKey:@"roundWaveTravel"];
                 }
                 CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-                fade.values = @[@0,@1,@.9,@0]; fade.keyTimes = @[@0,@.04,@.72,@1];
-                fade.beginTime = begin; fade.duration = duration*.78;
+                fade.values = @[@0,@1,@1,@0]; fade.keyTimes = @[@0,@.03,@.8,@1];
+                fade.beginTime = begin; fade.duration = duration*.75;
                 [ring addAnimation:fade forKey:@"roundWaveFade"];
             }
         }
@@ -334,12 +338,12 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         }
     }
     CAKeyframeAnimation *life = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-    CGFloat peak = MIN(1,alpha*1.35);
+    CGFloat peak = MIN(1,alpha*(style == 0 ? 1.55 : 1.35));
     life.values = @[@0,@(peak),@(peak),@0];
     life.keyTimes = @[@0,@.06,@.65,@1];
     life.duration = duration;
     [pulse addAnimation:life forKey:@"bedEffectLifetime"];
-    // Transparent when finished; at most two retained pulses, no timer queue.
+    // Transparent when finished; bounded pulses (three for ripples), no timer queue.
 }
 
 - (void)showRippleAtPoint:(CGPoint)point {
