@@ -118,6 +118,8 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
 %hook UIKeyboardLayoutStar
 - (void)didMoveToWindow {
     %orig;
-    RKKeyboardSessionSetActive(self.window != nil);
+    // UIKeyboardLayoutStar 仅有前置声明（@class），编译器不知道其继承 UIView，
+    // 显式转 UIView 才能访问 window 属性；运行时类型安全（本类即 UIView 子类）。
+    RKKeyboardSessionSetActive([(UIView *)self window] != nil);
 }
 %end
