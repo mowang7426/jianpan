@@ -204,6 +204,37 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [bloom addAnimation:fade forKey:@"ambientFade"];
     }
 }
+- (CALayer *)waveUnderCapMask {
+    CGFloat screenScale = self.window.screen.scale;
+    if (screenScale <= 0) screenScale = 2;
+    // Cache an alpha mask of the actual free keyboard bed. Clear operations
+    // form a union of all key faces, so overlapping keys never reopen a hole.
+    if (!self.underlightMaskImage || !CGRectEqualToRect(self.underlightMaskBounds,self.bounds) ||
+        self.underlightMaskImage.scale != screenScale) {
+        UIGraphicsBeginImageContextWithOptions(self.bounds.size, NO, screenScale);
+        CGContextRef context = UIGraphicsGetCurrentContext();
+        if (!context) { UIGraphicsEndImageContext(); return nil; }
+        CGContextTranslateCTM(context,-self.bounds.origin.x,-self.bounds.origin.y);
+        CGRect bed = CGRectNull;
+        for (NSValue *value in self.keyFrames) bed = CGRectUnion(bed,value.CGRectValue);
+        [[UIColor whiteColor] setFill];
+        UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
+        CGContextSetBlendMode(context,kCGBlendModeClear);
+        for (NSValue *value in self.keyFrames) {
+            // Full detected rectangles, not shrunken faces: do not brighten text.
+            CGContextFillRect(context,value.CGRectValue);
+        }
+        self.underlightMaskImage = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        self.underlightMaskBounds = self.bounds;
+    }
+    if (!self.underlightMaskImage) return nil;
+    CALayer *mask = [CALayer layer];
+    mask.frame = self.bounds;
+    mask.contentsScale = screenScale;
+    mask.contents = (__bridge id)self.underlightMaskImage.CGImage;
+    return mask;
+}
 - (void)showKeyWaveAtPoint:(CGPoint)point hue:(CGFloat)hue mode:(NSInteger)mode {
     if (!self.keyFrames.count) return;
     CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
@@ -214,8 +245,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     CGFloat reach = [self number:@"BackgroundRadius" fallback:180 low:60 high:360] * spread / 2;
     CGFloat softness = [self number:@"Softness" fallback:8 low:0 high:24];
     CGFloat band = [self number:@"BackgroundBand" fallback:.55 low:.2 high:.85];
-    CGFloat strength = [self number:@"BackgroundStrength" fallback:.18 low:0 high:.6];
-    CGFloat core = [self number:@"CoreStrength" fallback:.5 low:0 high:1];
     BOOL propagate = [self flag:@"BackgroundFeedback"];
     CGRect pressed = CGRectNull;
     CGFloat nearest = CGFLOAT_MAX;
@@ -233,11 +262,13 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     pulse.frame = self.bounds;
     // Clip the entire wave, including blurred shadows and overlapping presses,
     // so no colored pixels bleed through an opaque key face.
-    if ([self preservesBlackFaces]) pulse.mask = [self keyGutterMask];
+    CALayer *underMask = [self waveUnderCapMask];
+    if (!underMask) return;
+    pulse.mask = underMask;
     [self.layer addSublayer:pulse];
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     CGFloat tail = duration * (.45 + band);
-    [self addAmbientGlowToPulse:pulse origin:origin radius:reach hue:hue mode:mode duration:travel + tail];
+    // No face wash or large ambient cloud: wave is confined to the keyboard bed.
     for (NSUInteger index = 0; index < self.keyFrames.count; index++) {
         NSValue *value = self.keyFrames[index];
         CGRect rect = value.CGRectValue;
@@ -251,8 +282,17 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         UIColor *last = [UIColor colorWithHue:mode == 1 ? hue : fmod(keyHue + .12, 1)
                                  saturation:[self neonSaturation:.9] brightness:brightness alpha:1];
         CGFloat rimWidth = touched ? 3.0 : 2.6;
-        // P1-3: 使用预构建的几何模板，省去每次按键的路径复制/坐标变换/圆角路径构建。
-        RKKeyWaveGeometry *geometry = self.cachedWaveGeometries[index * 2 + (touched ? 1 : 0)];
+        // Frame coordinates are local to this key layer. Outline the full
+        // detected face; its exterior remains visible after key-face clipping.
+        RKKeyWaveGeometry *geometry = [RKKeyWaveGeometry new];
+        geometry.edgeFrame = CGRectInset(rect, -rimWidth, -rimWidth);
+        CGRect localFace = CGRectMake(rimWidth, rimWidth, rect.size.width, rect.size.height);
+        CGFloat corner = MIN(5, MIN(rect.size.width, rect.size.height)*.16);
+        geometry.outline = [UIBezierPath bezierPathWithRoundedRect:localFace cornerRadius:corner];
+        geometry.outer = [UIBezierPath bezierPathWithRoundedRect:
+            CGRectMake(0,0,geometry.edgeFrame.size.width,geometry.edgeFrame.size.height)
+            cornerRadius:corner+rimWidth];
+        [geometry.outer appendPath:geometry.outline];
         CALayer *key = [CALayer layer];
         key.name = @"keyWave";
         key.frame = geometry.edgeFrame;
@@ -262,14 +302,13 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         CAShapeLayer *halo = [CAShapeLayer layer];
         halo.frame = key.bounds;
         halo.path = geometry.outline.CGPath;
-        halo.fillColor = [self preservesBlackFaces] ? UIColor.clearColor.CGColor :
-            [first colorWithAlphaComponent:touched ? core * .45 : strength * .12].CGColor;
+        halo.fillColor = UIColor.clearColor.CGColor;
         halo.strokeColor = [first colorWithAlphaComponent:.7].CGColor;
         halo.lineWidth = rimWidth * 2;
         halo.shadowColor = first.CGColor;
         halo.shadowOffset = CGSizeZero;
-        halo.shadowRadius = softness * .6;
-        halo.shadowOpacity = .8;
+        halo.shadowRadius = MIN(1.2, softness * .15);
+        halo.shadowOpacity = .35;
         // P1-4: 显式 shadowPath，省掉 CA 每帧自动计算阴影形状，像素结果一致。
         halo.shadowPath = geometry.outline.CGPath;
         [key addSublayer:halo];
