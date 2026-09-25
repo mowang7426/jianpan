@@ -18,6 +18,19 @@
             <key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string>
         </dict>
 		<dict>
+			<key>cell</key><string>PSGroupCell</string>
+			<key>label</key><string>输入法保护</string>
+			<key>footerText</key><string>锁定仅保护本插件的键盘会话与短暂重挂状态，不会阻止 iOS 或微信输入法切换键盘。输入法扩展崩溃后系统切回原生键盘时，插件无法安全阻止。</string>
+		</dict>
+		<dict>
+			<key>cell</key><string>PSSwitchCell</string>
+			<key>key</key><string>KeyboardLock</string>
+			<key>label</key><string>锁定键盘保护</string>
+			<key>default</key><false/>
+			<key>defaults</key><string>com.minis.rainbowkeyboard</string>
+			<key>PostNotification</key><string>com.minis.rainbowkeyboard.changed</string>
+		</dict>
+		<dict>
 			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
