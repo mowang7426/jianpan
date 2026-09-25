@@ -29,8 +29,18 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
 %hook UIApplication
 - (void)sendEvent:(UIEvent *)event {
     %orig;
-    if (!RKKeyboardSessionActive()) return;
     if (event.type != UIEventTypeTouches) return;
+    if (!RKKeyboardSessionActive()) {
+        // 自愈兜底：触摸能解析出键盘宿主 = 键盘真实在场（通知可能未达），
+        // 直接激活会话，保证装饰不依赖通知时序。
+        BOOL keyboardTouch = NO;
+        for (UITouch *touch in event.allTouches) {
+            if (touch.phase != UITouchPhaseBegan) continue;
+            if (RKKeyboardEffectHost(touch.view)) { keyboardTouch = YES; break; }
+        }
+        if (!keyboardTouch) return;
+        RKKeyboardSessionSetActive(YES);
+    }
     for (UITouch *touch in event.allTouches) {
         if (touch.phase != UITouchPhaseBegan) continue;
         UIView *host = RKKeyboardEffectHost(touch.view);
@@ -99,5 +109,15 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
             [effect showRippleAtPoint:effectPoint sourceView:sourceView];
         });
     }
+}
+%end
+
+// 兜底：键盘视图挂上/离开 window 即键盘真实在场/离场信号。
+// 不依赖 UIKeyboardWillShow 通知（通知可能因时序/形态未达），
+// 直接由键盘视图生命周期驱动会话开关，确保装饰钩子不被错误短路。
+%hook UIKeyboardLayoutStar
+- (void)didMoveToWindow {
+    %orig;
+    RKKeyboardSessionSetActive(self.window != nil);
 }
 %end

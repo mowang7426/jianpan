@@ -48,17 +48,25 @@ static BOOL RKKeyboardSessionActiveValue;
 void RKKeyboardSessionSetActive(BOOL active) { RKKeyboardSessionActiveValue = active; }
 BOOL RKKeyboardSessionActive(void) { return RKKeyboardSessionActiveValue; }
 
+// addObserverForName 返回的 observer token 必须被持有，否则 ARC 下立即释放、
+// 通知注册随之失效（iOS 经典坑）。此前的实现丢弃了 token，导致会话开关
+// 永远收不到 UIKeyboardWillShow，所有装饰钩子持续短路 —— 键盘无光效。
+static id RKKeyboardSessionObserverTokens[3];
+
 __attribute__((constructor))
 static void RKKeyboardSessionInstallObservers(void) {
-    [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardWillShowNotification
+    RKKeyboardSessionObserverTokens[0] = [[NSNotificationCenter defaultCenter]
+        addObserverForName:UIKeyboardWillShowNotification
         object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
         RKKeyboardSessionSetActive(YES);
     }];
-    [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardDidHideNotification
+    RKKeyboardSessionObserverTokens[1] = [[NSNotificationCenter defaultCenter]
+        addObserverForName:UIKeyboardDidHideNotification
         object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
         RKKeyboardSessionSetActive(NO);
     }];
-    [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidEnterBackgroundNotification
+    RKKeyboardSessionObserverTokens[2] = [[NSNotificationCenter defaultCenter]
+        addObserverForName:UIApplicationDidEnterBackgroundNotification
         object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
         RKKeyboardSessionSetActive(NO);
     }];

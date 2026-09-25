@@ -2012,17 +2012,19 @@ static void RKWriteBlackDiagnostic(void) {
         RKInstallNativeStateHooks();
         CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), NULL, RKBlackChanged,
             CFSTR("com.minis.rainbowkeyboard.changed"), NULL, CFNotificationSuspensionBehaviorDeliverImmediately);
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
+        // block observer 的 token 必须持有，否则 ARC 下立即释放导致通知失效。
+        static id blackObserverTokens[3];
+        blackObserverTokens[0] = [[NSNotificationCenter defaultCenter] addObserverForName:UIApplicationDidBecomeActiveNotification
             object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
                 RKRequestPreferencesRelay();
                 RKBlackReload();
             }];
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardWillShowNotification
+        blackObserverTokens[1] = [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardWillShowNotification
             object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
                 RKRequestPreferencesRelay();
                 RKBlackReload();
             }];
-        [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardDidShowNotification
+        blackObserverTokens[2] = [[NSNotificationCenter defaultCenter] addObserverForName:UIKeyboardDidShowNotification
             object:nil queue:NSOperationQueue.mainQueue usingBlock:^(NSNotification *note) {
                 dispatch_after(dispatch_time(DISPATCH_TIME_NOW, NSEC_PER_SEC), dispatch_get_main_queue(), ^{
                     RKWriteBlackDiagnostic();
