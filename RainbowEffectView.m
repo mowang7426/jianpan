@@ -261,8 +261,15 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     CGFloat reach = MIN(210,MAX(100,[self number:@"BackgroundRadius" fallback:180 low:60 high:360]));
     CGFloat duration = MIN(.75,MAX(.42,[self number:@"Duration" fallback:.55 low:.15 high:1.2]));
     if (fast) { duration = .38; reach = MIN(reach,145); }
+    if (style == 0) {
+        // Water-drop mode: compact reach and slow, even radial motion.
+        // Fast input drops the second front instead of speeding up the first.
+        reach = MIN(105,MAX(65,pressed.size.width*.85));
+        duration = .95;
+    }
     if (reduce) reach = 32;
     CGPoint origin = CGPointMake(CGRectGetMidX(pressed),CGRectGetMaxY(pressed)+1);
+    if (style == 0) origin = point; // Impact follows the actual touch beneath the masked keycap.
     CALayer *pulse = [CALayer layer];
     pulse.name = style == 0 ? @"RKBedRipples" : @"RKBedSpread";
     pulse.frame = self.bounds;
@@ -272,8 +279,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     [self.layer addSublayer:pulse];
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     if (style == 0) {
-        // Two round fronts, not one rectangular frame per key. A modest
-        // outer shoulder gives the bright fronts body without a blur cloud.
+        // Two restrained water ripples; the trailing ripple is weaker.
         NSUInteger fronts = fast || reduce ? 1 : 2;
         for (NSUInteger i = 0; i < fronts; i++) {
             for (NSUInteger pass = 0; pass < 2; pass++) {
@@ -282,27 +288,27 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
                 ring.bounds = self.bounds;
                 ring.contentsScale = self.window.screen.scale;
                 ring.fillColor = UIColor.clearColor.CGColor;
-                ring.strokeColor = [color colorWithAlphaComponent:pass ? 1 : .2].CGColor;
-                ring.lineWidth = pass ? 4 : 10;
+                ring.strokeColor = [color colorWithAlphaComponent:(pass ? 1 : .12) * (i ? .52 : 1)].CGColor;
+                ring.lineWidth = pass ? 2.2 : 4.5;
                 ring.opacity = 0;
-                CGFloat initial = reduce ? 26 : 5;
+                CGFloat initial = reduce ? 26 : 3;
                 UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
                 UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-reach,origin.y-reach,reach*2,reach*2)];
                 ring.path = end.CGPath;
                 [pulse addSublayer:ring];
-                CFTimeInterval begin = now + i*duration*.2;
+                CFTimeInterval begin = now + i*duration*.22;
                 if (!reduce) {
                     CABasicAnimation *expand = [CABasicAnimation animationWithKeyPath:@"path"];
                     expand.fromValue = (__bridge id)start.CGPath;
                     expand.toValue = (__bridge id)end.CGPath;
                     expand.beginTime = begin;
-                    expand.duration = duration*.8;
-                    expand.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+                    expand.duration = duration*.78;
+                    expand.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionLinear];
                     [ring addAnimation:expand forKey:@"roundWaveTravel"];
                 }
                 CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-                fade.values = @[@0,@1,@.9,@0]; fade.keyTimes = @[@0,@.08,@.6,@1];
-                fade.beginTime = begin; fade.duration = duration*.8;
+                fade.values = @[@0,@1,@.65,@0]; fade.keyTimes = @[@0,@.10,@.55,@1];
+                fade.beginTime = begin; fade.duration = duration*.78;
                 [ring addAnimation:fade forKey:@"roundWaveFade"];
             }
         }
