@@ -45,14 +45,10 @@ NSUInteger RKClassFeatures(Class cls) {
 
 #pragma mark - 键盘会话状态（P0-3：全局钩子快速短路开关）
 
-static BOOL RKKeyboardLockEnabled(void) {
-    NSDictionary *prefs = RKReadEffectivePreferences();
-    return [prefs[@"KeyboardLock"] boolValue];
-}
-
+// Always clear decoration session state on hide/background. Retaining this
+// flag cannot keep an extension alive or prevent a system termination.
 static BOOL RKKeyboardSessionActiveValue;
 void RKKeyboardSessionSetActive(BOOL active) {
-    if (!active && RKKeyboardLockEnabled()) return;
     RKKeyboardSessionActiveValue = active;
 }
 BOOL RKKeyboardSessionActive(void) { return RKKeyboardSessionActiveValue; }

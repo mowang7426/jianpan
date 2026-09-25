@@ -251,7 +251,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if (brightness <= 0 || alpha <= 0) return;
     BOOL fast = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2;
     BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
-    NSUInteger limit = fast ? 1 : 2;
+    NSUInteger limit = style == 0 ? 3 : (fast ? 1 : 2);
     while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
     NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
     self.hue = fmod(self.hue+.137,1);
@@ -269,7 +269,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     }
     if (reduce) reach = 32;
     CGPoint origin = CGPointMake(CGRectGetMidX(pressed),CGRectGetMaxY(pressed)+1);
-    if (style == 0) origin = point; // Impact follows the actual touch beneath the masked keycap.
+    // Ripples originate just below the key so their first crest is visible immediately.
     CALayer *pulse = [CALayer layer];
     pulse.name = style == 0 ? @"RKBedRipples" : @"RKBedSpread";
     pulse.frame = self.bounds;
@@ -288,8 +288,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
                 ring.bounds = self.bounds;
                 ring.contentsScale = self.window.screen.scale;
                 ring.fillColor = UIColor.clearColor.CGColor;
-                ring.strokeColor = [color colorWithAlphaComponent:(pass ? 1 : .12) * (i ? .52 : 1)].CGColor;
-                ring.lineWidth = pass ? 2.2 : 4.5;
+                ring.strokeColor = [color colorWithAlphaComponent:(pass ? 1 : .22) * (i ? .72 : 1)].CGColor;
+                ring.lineWidth = pass ? 3.8 : 7;
                 ring.opacity = 0;
                 CGFloat initial = reduce ? 26 : 3;
                 UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
@@ -307,7 +307,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
                     [ring addAnimation:expand forKey:@"roundWaveTravel"];
                 }
                 CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-                fade.values = @[@0,@1,@.65,@0]; fade.keyTimes = @[@0,@.10,@.55,@1];
+                fade.values = @[@0,@1,@.9,@0]; fade.keyTimes = @[@0,@.04,@.72,@1];
                 fade.beginTime = begin; fade.duration = duration*.78;
                 [ring addAnimation:fade forKey:@"roundWaveFade"];
             }
