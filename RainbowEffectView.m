@@ -29,6 +29,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 @end
 @interface RainbowEffectView ()
 @property(nonatomic,strong) NSDictionary *config;
+@property(nonatomic,strong) UIImage *underlightMaskImage;
+@property(nonatomic) CGRect underlightMaskBounds;
 @property(nonatomic) CGFloat hue;
 @property(nonatomic) CGFloat pressHue;
 @property(nonatomic,strong) CALayer *fastFeedback;
@@ -119,6 +121,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 - (void)setKeyFrames:(NSArray<NSValue *> *)keyFrames {
     if ([_keyFrames isEqualToArray:keyFrames]) return;
     _keyFrames = [keyFrames copy];
+    self.underlightMaskImage = nil;
     NSMutableArray *faces = [NSMutableArray arrayWithCapacity:_keyFrames.count];
     NSMutableArray *centers = [NSMutableArray arrayWithCapacity:_keyFrames.count];
     NSMutableArray *geometries = [NSMutableArray arrayWithCapacity:_keyFrames.count * 2];
@@ -300,9 +303,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 - (void)showRippleAtPoint:(CGPoint)point {
     [self showRippleAtPoint:point sourceView:nil];
 }
-// Draw only in the free space BELOW key rectangles. Never shrink a key
-// rectangle to manufacture a gap: an unknown/tight layout should show less
-// light, rather than tint the keycap or its text.
 - (void)showCrispUnderlightAtPoint:(CGPoint)point {
     CGRect pressed = CGRectNull;
     for (NSValue *value in self.keyFrames) {
@@ -310,98 +310,91 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         if (CGRectContainsPoint(r, point) &&
             (CGRectIsNull(pressed) || r.size.width*r.size.height < pressed.size.width*pressed.size.height)) pressed = r;
     }
-    if (CGRectIsNull(pressed)) return;
+    if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
     CGFloat brightness = [self number:@"Brightness" fallback:.95 low:0 high:1];
     CGFloat opacity = [self number:@"Opacity" fallback:.65 low:0 high:1];
     if (brightness <= 0 || opacity <= 0) return;
-    NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
-    self.hue = fmod(self.hue + .137, 1);
-    CGFloat hue = mode == 1 ? [self number:@"Hue" fallback:.55 low:0 high:1] :
-        (mode == 2 ? point.x/MAX(1,self.bounds.size.width) : self.hue);
-    UIColor *color = [UIColor colorWithHue:hue saturation:[self neonSaturation:.9] brightness:brightness alpha:1];
-    BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
+    CGFloat screenScale = self.window.screen.scale;
+    if (screenScale <= 0) screenScale = 2;
+    // Cache an alpha mask of the actual free keyboard bed. Clear operations
+    // form a union of all key faces, so overlapping keys never reopen a hole.
+    if (!self.underlightMaskImage || !CGRectEqualToRect(self.underlightMaskBounds,self.bounds) ||
+        self.underlightMaskImage.scale != screenScale) {
+        UIGraphicsBeginImageContextWithOptions(self.bounds.size, NO, screenScale);
+        CGContextRef context = UIGraphicsGetCurrentContext();
+        if (!context) { UIGraphicsEndImageContext(); return; }
+        CGContextTranslateCTM(context,-self.bounds.origin.x,-self.bounds.origin.y);
+        CGRect bed = CGRectNull;
+        for (NSValue *value in self.keyFrames) bed = CGRectUnion(bed,value.CGRectValue);
+        [[UIColor whiteColor] setFill];
+        UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
+        CGContextSetBlendMode(context,kCGBlendModeClear);
+        for (NSValue *value in self.keyFrames) {
+            // Full detected rectangles, not shrunken faces: do not brighten text.
+            CGContextFillRect(context,value.CGRectValue);
+        }
+        self.underlightMaskImage = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        self.underlightMaskBounds = self.bounds;
+    }
+    if (!self.underlightMaskImage) return;
     BOOL fast = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2;
+    BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
     NSUInteger limit = fast ? 1 : 2;
     while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
+    NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
+    self.hue = fmod(self.hue + .137,1);
+    CGFloat hue = mode == 1 ? [self number:@"Hue" fallback:.55 low:0 high:1] :
+        (mode == 2 ? point.x/MAX(1,self.bounds.size.width) : self.hue);
+    UIColor *color = [UIColor colorWithHue:hue saturation:[self neonSaturation:1] brightness:brightness alpha:1];
     CALayer *pulse = [CALayer layer];
+    pulse.name = @"RKExpandingUnderlight";
     pulse.frame = self.bounds;
-    pulse.name = @"RKCrispUnderlight";
+    pulse.bounds = self.bounds;
     pulse.opacity = 0;
-    CGPoint origin = CGPointMake(CGRectGetMidX(pressed),CGRectGetMidY(pressed));
-    NSArray<NSValue *> *ordered = [self.keyFrames sortedArrayUsingComparator:^NSComparisonResult(NSValue *a, NSValue *b) {
-        CGRect ar = a.CGRectValue, br = b.CGRectValue;
-        CGFloat da = hypot(CGRectGetMidX(ar)-origin.x,CGRectGetMidY(ar)-origin.y);
-        CGFloat db = hypot(CGRectGetMidX(br)-origin.x,CGRectGetMidY(br)-origin.y);
-        return da < db ? NSOrderedAscending : (da > db ? NSOrderedDescending : NSOrderedSame);
-    }];
-    CGFloat reach = MIN(140,MAX(70,pressed.size.width*1.8));
-    CFTimeInterval now = CACurrentMediaTime();
-    NSUInteger count = 0;
-    for (NSValue *value in ordered) {
-        CGRect r = value.CGRectValue;
-        CGFloat distance = hypot(CGRectGetMidX(r)-origin.x,CGRectGetMidY(r)-origin.y);
-        if (distance > reach || count >= (fast || reduce ? 1u : 5u)) break;
-        // A bright 1pt lower edge and a faint 1pt outer edge: no blur,
-        // filled key faces, shadows, central flash or full-keyboard wash.
-        for (NSUInteger edge = 0; edge < 2; edge++) {
-            CGFloat y = CGRectGetMaxY(r) + 1 + edge*1.2;
-            CGFloat x0 = CGRectGetMinX(r)+MIN(5,r.size.width*.15);
-            CGFloat x1 = CGRectGetMaxX(r)-MIN(5,r.size.width*.15);
-            if (y-.65 < CGRectGetMinY(self.bounds) || y+.65 > CGRectGetMaxY(self.bounds)) continue;
-            NSMutableArray<NSValue *> *segments = [NSMutableArray arrayWithObject:[NSValue valueWithCGPoint:CGPointMake(x0,x1)]];
-            // Clip the entire stroke footprint against EVERY detected key,
-            // including adjacent rows, space/return keys and overlapping frames.
-            for (NSValue *other in self.keyFrames) {
-                CGRect blocked = CGRectInset(other.CGRectValue,-.25,-.65);
-                if (y < CGRectGetMinY(blocked) || y > CGRectGetMaxY(blocked)) continue;
-                NSMutableArray<NSValue *> *next = [NSMutableArray array];
-                for (NSValue *segment in segments) {
-                    CGPoint s = segment.CGPointValue;
-                    CGFloat left = CGRectGetMinX(blocked), right = CGRectGetMaxX(blocked);
-                    if (right <= s.x || left >= s.y) [next addObject:segment];
-                    else {
-                        if (left > s.x) [next addObject:[NSValue valueWithCGPoint:CGPointMake(s.x,MIN(left,s.y))]];
-                        if (right < s.y) [next addObject:[NSValue valueWithCGPoint:CGPointMake(MAX(right,s.x),s.y)]];
-                    }
-                }
-                segments = next;
-            }
-            UIBezierPath *path = [UIBezierPath bezierPath];
-            for (NSValue *segment in segments) {
-                CGPoint s = segment.CGPointValue;
-                if (s.y-s.x < 1) continue;
-                [path moveToPoint:CGPointMake(s.x,y)];
-                [path addLineToPoint:CGPointMake(s.y,y)];
-            }
-            if (path.empty) continue;
-            CAShapeLayer *line = [CAShapeLayer layer];
-            line.frame = self.bounds;
-            line.contentsScale = self.window.screen.scale;
-            line.path = path.CGPath;
-            line.fillColor = UIColor.clearColor.CGColor;
-            line.strokeColor = color.CGColor;
-            line.lineWidth = 1;
-            line.lineCap = kCALineCapButt;
-            line.opacity = 0;
-            [pulse addSublayer:line];
-            CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-            CGFloat strength = (edge ? .2 : 1) * (1-.5*distance/reach);
-            fade.values = @[@0,@(strength),@(strength*.7),@0];
-            fade.keyTimes = @[@0,@.08,@.45,@1];
-            fade.duration = fast ? .16 : .26;
-            fade.beginTime = now + (reduce ? 0 : distance/reach*.09);
-            [line addAnimation:fade forKey:@"underlightFade"];
-        }
-        count++;
-    }
-    if (!pulse.sublayers.count) return;
+    CALayer *mask = [CALayer layer];
+    mask.frame = self.bounds;
+    mask.contentsScale = screenScale;
+    mask.contents = (__bridge id)self.underlightMaskImage.CGImage;
+    pulse.mask = mask;
     [self.layer addSublayer:pulse];
-    CABasicAnimation *life = [CABasicAnimation animationWithKeyPath:@"opacity"];
-    life.fromValue = @(opacity); life.toValue = @(opacity);
-    life.duration = .38;
-    [pulse addAnimation:life forKey:@"underlightLifetime"];
-    // Expired layers are transparent and evicted by the next press (max two).
-    // No per-key dispatch_after queue and no persistent display-link animation.
+    // Launch from just underneath the pressed key, rather than its letter.
+    CGPoint origin = CGPointMake(CGRectGetMidX(pressed),CGRectGetMaxY(pressed)+1);
+    CGFloat reach = MIN(210,MAX(105,[self number:@"BackgroundRadius" fallback:180 low:60 high:360]));
+    CGFloat duration = MIN(.65,MAX(.38,[self number:@"Duration" fallback:.55 low:.15 high:1.2]));
+    if (fast) { reach = MIN(reach,145); duration = .38; }
+    CGFloat initial = reduce ? 26 : 5;
+    CGFloat finalRadius = reduce ? initial : reach;
+    UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
+    UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-finalRadius,origin.y-finalRadius,finalRadius*2,finalRadius*2)];
+    // A 20pt moving band with an 8pt bright core. No Gaussian blur or
+    // whole-keyboard color wash. Both layers are clipped to the same gaps.
+    for (NSUInteger pass = 0; pass < 2; pass++) {
+        CAShapeLayer *ring = [CAShapeLayer layer];
+        ring.frame = self.bounds;
+        ring.bounds = self.bounds;
+        ring.contentsScale = screenScale;
+        ring.fillColor = UIColor.clearColor.CGColor;
+        ring.strokeColor = [color colorWithAlphaComponent:pass ? 1 : .28].CGColor;
+        ring.lineWidth = pass ? 8 : 20;
+        ring.path = end.CGPath;
+        [pulse addSublayer:ring];
+        if (!reduce) {
+            CABasicAnimation *expand = [CABasicAnimation animationWithKeyPath:@"path"];
+            expand.fromValue = (__bridge id)start.CGPath;
+            expand.toValue = (__bridge id)end.CGPath;
+            expand.duration = duration;
+            expand.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+            [ring addAnimation:expand forKey:@"underlightExpansion"];
+        }
+    }
+    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    CGFloat peak = MIN(1,opacity*1.35);
+    fade.values = @[@0,@(peak),@(peak),@0];
+    fade.keyTimes = @[@0,@.06,@.62,@1];
+    fade.duration = duration;
+    [pulse addAnimation:fade forKey:@"underlightLifetime"];
+    // Transparent after expiration; the next press evicts old layers (max two).
 }
 
 - (void)showRippleAtPoint:(CGPoint)point sourceView:(UIView *)sourceView {
