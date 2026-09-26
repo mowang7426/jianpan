@@ -17,6 +17,13 @@ static char RKGeometryTimeKey;
 @end
 @implementation RKPendingPress
 @end
+static void RKClearEffectLayers(RainbowEffectView *effect) {
+    for (CALayer *layer in effect.layer.sublayers.copy) {
+        [layer removeAllAnimations];
+        [layer removeFromSuperlayer];
+    }
+}
+
 static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, NSUInteger depth) {
     if (depth > 8) return;
     for (UIView *v in node.subviews) {
@@ -92,11 +99,7 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
             if (scan) objc_setAssociatedObject(liveHost, &RKGeometryTimeKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             BOOL keyGeometryChanged = ![effect.keyFrames isEqualToArray:liveKeyFrames];
             if (geometryChanged || keyGeometryChanged) {
-                // Old animations retain old key rectangles; discard them on a layout change.
-                for (CALayer *layer in effect.layer.sublayers.copy) {
-                    [layer removeAllAnimations];
-                    [layer removeFromSuperlayer];
-                }
+                RKClearEffectLayers(effect);
                 effect.frame = liveHost.bounds;
                 [liveHost bringSubviewToFront:effect];
                 {

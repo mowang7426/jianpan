@@ -346,8 +346,14 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Transparent when finished; bounded pulses (three for ripples), no timer queue.
 }
 
-- (void)showRippleAtPoint:(CGPoint)point {
-    [self showRippleAtPoint:point sourceView:nil];
+- (void)clearLegacyKeycapFeedback {
+    for (CALayer *layer in self.layer.sublayers.copy) {
+        NSString *name = layer.name ?: @"";
+        if ([name isEqualToString:@"neonKeyPress"] || [name isEqualToString:@"RKFastInputFeedback"]) {
+            [layer removeAllAnimations];
+            [layer removeFromSuperlayer];
+        }
+    }
 }
 - (void)showCrispUnderlightAtPoint:(CGPoint)point {
     CGRect pressed = CGRectNull;
@@ -454,11 +460,9 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         return;
     }
     if (!self.window || self.hidden) return;
-    // Keep the original wave/ripple appearance during fast input too.
-    // Tweak.xm still coalesces/throttles decoration work to protect typing.
-    [self.fastFeedback removeAllAnimations];
-    [self.fastFeedback removeFromSuperlayer];
     NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:3];
+    // Bed-only styles must not coexist with a captured keycap feedback layer.
+    if (style == 0 || style == 1 || style == 3) [self clearLegacyKeycapFeedback];
     // Keep the user's original configured style; adaptive mode only reduces work.
     if (style != self.lastStyle) {
         for (CALayer *layer in self.layer.sublayers.copy) [layer removeFromSuperlayer];
