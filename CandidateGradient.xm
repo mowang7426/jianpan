@@ -508,7 +508,8 @@ static void RKWriteNativeDiagnostic(void) {
 %ctor {
     @autoreleasepool {
         RKCandidateViews = [NSHashTable weakObjectsHashTable];
-        RKCandidateReload();
+        // UIKit screen/window APIs are unavailable during SpringBoard dyld initialization.
+        dispatch_async(dispatch_get_main_queue(), ^{ RKCandidateReload(); });
         %init;
         RKInstallNativeCandidateHook();
         _dyld_register_func_for_add_image(RKCandidateImageLoaded);

@@ -2042,7 +2042,8 @@ static void RKWriteBlackDiagnostic(void) {
         RKNativeBackgrounds = [NSHashTable weakObjectsHashTable];
         RKStartPreferencesRelay();
         RKRequestPreferencesRelay();
-        RKBlackReload();
+        // Defer UIKit appearance access until SpringBoard has finished launching.
+        dispatch_async(dispatch_get_main_queue(), ^{ RKBlackReload(); });
         RKInstallBlackHooks();
         _dyld_register_func_for_add_image(RKBlackImageLoaded);
         %init(RKBlackPublicViews);
