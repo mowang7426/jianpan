@@ -426,8 +426,12 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     [self.layer addSublayer:pulse];
     [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
                           duration:duration reduce:reduce];
-    [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
-                         duration:duration reduce:reduce];
+    // Only native Spread (style 1) receives the imported per-key wave.
+    // usesNativeKeycapGlow inside the helper rejects WeType before creating layers.
+    if (style == 1) {
+        [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
+                             duration:duration reduce:reduce];
+    }
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     if (style == 0) {
         // A broad body, bright shoulder and crisp foam crest, followed by a weaker swell.
@@ -586,8 +590,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     CGFloat finalRadius = reduce ? initial : reach;
     [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
                           duration:duration reduce:reduce];
-    [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
-                         duration:duration reduce:reduce];
     UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
     UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-finalRadius,origin.y-finalRadius,finalRadius*2,finalRadius*2)];
     // A 20pt moving band with an 8pt bright core. No Gaussian blur or
