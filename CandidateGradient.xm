@@ -245,22 +245,31 @@ static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^origina
     }
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:bounds.size format:format];
     __block UIImage *glyphs;
+    __block BOOL originalRendered = NO;
     RKCandidateDrawingDepth++;
     @try {
         glyphs = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
             CGContextTranslateCTM(context.CGContext, -bounds.origin.x, -bounds.origin.y);
+            originalRendered = YES;
             original();
         }];
     } @finally { RKCandidateDrawingDepth--; }
     CGImageRef image = glyphs.CGImage;
-    if (!image) { original(); return; }
+    if (!image) {
+        if (!originalRendered) original();
+        return;
+    }
     size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
     NSMutableData *pixels = [NSMutableData dataWithLength:width * height * 4];
     CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
     CGContextRef scan = CGBitmapContextCreate(pixels.mutableBytes, width, height, 8, width * 4, space,
         kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
     CGColorSpaceRelease(space);
-    if (!scan) { original(); return; }
+    if (!scan) {
+        if (originalRendered) [glyphs drawInRect:bounds];
+        else original();
+        return;
+    }
     CGContextDrawImage(scan, CGRectMake(0, 0, width, height), image);
     const uint8_t *bytes = (const uint8_t *)pixels.bytes;
     size_t minX = width, maxX = 0;
@@ -474,6 +483,10 @@ static void RKWriteNativeDiagnostic(void) {
 // WeType overrides UILabel drawing; keep its existing concrete hook.
 %hook WBTextItemLabel
 - (void)drawTextInRect:(CGRect)rect {
+    if (!RKKeyboardSessionActive()) {
+        %orig;
+        return;
+    }
     RKDrawCandidate((UILabel *)self, rect, NO, ^{ 
         %orig;
  });
