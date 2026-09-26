@@ -244,10 +244,9 @@ NSArray<NSValue *> *RKKeyboardKeyFrames(UIView *host) {
             RKAddKey(frames, rect, host.bounds);
         }
     }
-    if (frames.count < 3) {
-        [frames removeAllObjects];
-        RKViewKeys(host, host, frames, 0);
-    }
+    // Private keyplane lists can omit numeric, alphabetic, or alternate rows.
+    // Merge the visible view hierarchy so every rendered layout is covered.
+    RKViewKeys(host, host, frames, 0);
     return frames;
 }
 
