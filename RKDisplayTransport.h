@@ -80,8 +80,10 @@ static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[R
         words[1] |= (uint64_t)[theme integerValue] << 46;
     }
     id weChatTheme = prefs[@"WeChatTheme"];
-    if ([weChatTheme isKindOfClass:NSNumber.class] && [weChatTheme integerValue] >= 0 && [weChatTheme integerValue] <= 3) {
-        words[1] |= (uint64_t)[weChatTheme integerValue] << 54;
+    if ([weChatTheme isKindOfClass:NSNumber.class] && [weChatTheme integerValue] >= 0 && [weChatTheme integerValue] <= 8) {
+        // Keep the legacy 2-bit field and use the unused word 5 for themes 4-8.
+        words[1] |= (uint64_t)([weChatTheme integerValue] & 3) << 54;
+        words[5] = (uint64_t)[weChatTheme integerValue];
     }
     id mode = prefs[@"PressColorMode"];
     if ([mode isKindOfClass:NSNumber.class] && isfinite([mode doubleValue])) {
@@ -147,7 +149,8 @@ static inline NSDictionary *RKDecodeDisplaySnapshot(const uint64_t words[RKDispl
         if (theme > 13) return nil;
         result[@"Theme"] = @(theme);
     }
-    result[@"WeChatTheme"] = @((words[1] >> 54) & 3);
+    NSUInteger weChatTheme = words[5] <= 8 ? (NSUInteger)words[5] : (NSUInteger)((words[1] >> 54) & 3);
+    result[@"WeChatTheme"] = @(weChatTheme);
     if (words[1] & (UINT64_C(1) << 41)) result[@"PressColorMode"] = @((words[1] >> 42) & 1);
     if (words[1] & (UINT64_C(1) << 43)) {
         uint32_t bits = (uint32_t)(words[14] >> 32);
