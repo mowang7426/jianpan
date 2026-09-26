@@ -744,13 +744,21 @@ static id RKBlackObjectIvar(id object, const char *name) {
     return object_getIvar(object, ivar);
 }
 
-// Native-only ownership prevents this compatibility path from touching WeType.
+// UIKB ownership keeps this compatibility path scoped away from custom WeType views.
 static BOOL RKNativeKeyboardProcess(NSString *bundle) {
     return ![bundle.lowercaseString containsString:@"wetype"];
 }
 
+static BOOL RKUIKBKeyboardProcess(NSString *bundle) {
+    if (RKNativeKeyboardProcess(bundle)) return YES;
+    // WeType can host native UIKB layouts for 26-key and numeric planes.
+    return [bundle.lowercaseString containsString:@"wetype"] &&
+        NSClassFromString(@"UIKBKeyView") != Nil &&
+        NSClassFromString(@"UIKBKeyplaneView") != Nil;
+}
+
 static BOOL RKNativeKeyView(UIView *view) {
-    if (!RKNativeKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return NO;
+    if (!RKUIKBKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return NO;
     Class key = NSClassFromString(@"UIKBKeyView");
     if (!key || ![view isKindOfClass:key]) return NO;
     for (UIView *parent = view; parent; parent = parent.superview)
@@ -864,7 +872,7 @@ static void RKRefreshNativeKey(UIView *view) {
 }
 
 static BOOL RKBeginNativeStateTransition(void) {
-    if (!NSThread.isMainThread || !RKNativeKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return NO;
+    if (!NSThread.isMainThread || !RKUIKBKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return NO;
     if (RKNativeStateTransitionDepth++ == 0) RKNativePendingKeys = [NSMutableSet set];
     return YES;
 }
@@ -898,7 +906,7 @@ static UIView *RKNativeStateView(UIView *plane, id key, int state) {
 }
 
 static void RKQueueNativeStateKey(UIView *plane, id key, int state) {
-    if (!NSThread.isMainThread || !RKNativeKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return;
+    if (!NSThread.isMainThread || !RKUIKBKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return;
     UIView *view = RKNativeStateView(plane, key, state);
     if (!view) return;
     if (RKNativeStateTransitionDepth && RKNativePendingKeys)
@@ -1086,7 +1094,7 @@ static id RKNativeCopyKeyTraits(id original, NSMapTable *copies, NSUInteger dept
 }
 
 static id RKNativeKeyTraits(id original, id key, id plane) {
-    if (!RKBlackEnabled() || !RKNativeKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return original;
+    if (!RKBlackEnabled() || !RKUIKBKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return original;
     id keys = RKNativeObject(plane, @"keys");
     if ((![keys isKindOfClass:NSArray.class] && ![keys isKindOfClass:NSSet.class]) || ![keys containsObject:key])
         return original;
@@ -1805,7 +1813,7 @@ static BOOL RKNativeMethod(Class cls, NSString *name, const char *result, NSArra
 }
 
 static void RKInstallNativeStateHooks(void) {
-    if (!RKNativeKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return;
+    if (!RKUIKBKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return;
     Class key = NSClassFromString(@"UIKBKeyView"), plane = NSClassFromString(@"UIKBKeyplaneView");
     static BOOL render, backdrop, state, reason, view, layers, backgroundSelection;
     if (!RKNativeMultiplyHookInstalled &&
