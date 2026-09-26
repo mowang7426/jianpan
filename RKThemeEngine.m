@@ -10,6 +10,7 @@ static NSDictionary *RKWeChatKeycapTheme(NSString *name, NSArray *background, NS
     return @{@"name":name, @"KeyboardBackgroundColor":background, @"KeycapColor":keycap,
              @"KeycapTextColor":text, @"KeycapPressedColor":pressed,
              @"CandidateStart":candidateStart, @"CandidateEnd":candidateEnd,
+             @"CandidateGradient":@NO, @"CandidateWeType":@NO,
              @"PressColor":candidateStart, @"PressColorMode":@1,
              @"PureBlackKeyboard":@YES, @"WeChatKeyboard":@YES};
 }
