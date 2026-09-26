@@ -194,8 +194,8 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 }
 - (void)chooseWeChatTheme {
     [self chooseSimpleOptionForKey:@"WeChatTheme" title:@"微信键帽主题"
-                           options:@[@"关闭", @"天空蓝", @"极简白", @"哆啦A梦"]
-                             values:@[@0, @1, @2, @3]];
+                           options:@[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚", @"紫藤晚霞", @"柠檬汽泡"]
+                             values:@[@0, @1, @2, @3, @4, @5]];
 }
 - (void)chooseCandidateGradientMode {
     [self chooseSimpleOptionForKey:@"CandidateGradientMode" title:@"候选栏渐变" options:@[@"关闭", @"静态渐变", @"流动渐变", @"呼吸渐变", @"彩虹渐变", @"跟随输入"] values:@[@0,@1,@2,@3,@4,@5]];
@@ -245,7 +245,7 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"自定义";
     } else if ([key isEqualToString:@"WeChatTheme"]) {
-        NSArray *titles = @[@"关闭", @"天空蓝", @"极简白", @"哆啦A梦"];
+        NSArray *titles = @[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚", @"紫藤晚霞", @"柠檬汽泡"];
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"关闭";
     } else if ([key isEqualToString:@"CandidateGradientMode"]) {
