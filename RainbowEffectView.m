@@ -283,6 +283,62 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     }
 }
 
+// Rebuild the 1.1.8 native "keyWave" outline on top of the new spreading
+// pool. The deb ships only a compiled dylib; it cannot supply verbatim source.
+// Each nearby key lights up as the expanding front arrives. WeType never enters.
+- (void)addNativeKeyWavesToPulse:(CALayer *)pulse origin:(CGPoint)origin
+                           reach:(CGFloat)reach color:(UIColor *)color
+                        duration:(CGFloat)duration reduce:(BOOL)reduce {
+    if (![self usesNativeKeycapGlow] || !self.cachedWaveGeometries.count) return;
+    CGFloat maxDistance = MAX(1,reach);
+    NSMutableArray<NSNumber *> *nearby = [NSMutableArray array];
+    for (NSUInteger i = 0; i < self.cachedCenters.count; i++) {
+        CGPoint center = self.cachedCenters[i].CGPointValue;
+        CGFloat distance = hypot(center.x-origin.x,center.y-origin.y);
+        if (distance <= maxDistance + 14) [nearby addObject:@(i)];
+    }
+    [nearby sortUsingComparator:^NSComparisonResult(NSNumber *a, NSNumber *b) {
+        CGPoint ca = self.cachedCenters[a.unsignedIntegerValue].CGPointValue;
+        CGPoint cb = self.cachedCenters[b.unsignedIntegerValue].CGPointValue;
+        CGFloat da = hypot(ca.x-origin.x,ca.y-origin.y);
+        CGFloat db = hypot(cb.x-origin.x,cb.y-origin.y);
+        return da < db ? NSOrderedAscending : (da > db ? NSOrderedDescending : NSOrderedSame);
+    }];
+    // Bound the layer cost even on a 26-key layout / rapid typing.
+    NSUInteger count = MIN((NSUInteger)18,nearby.count);
+    for (NSUInteger j = 0; j < count; j++) {
+        NSUInteger index = nearby[j].unsignedIntegerValue;
+        CGPoint center = self.cachedCenters[index].CGPointValue;
+        CGFloat distance = hypot(center.x-origin.x,center.y-origin.y);
+        RKKeyWaveGeometry *geometry = self.cachedWaveGeometries[index*2];
+        CAShapeLayer *wave = [CAShapeLayer layer];
+        wave.name = @"keyWave";
+        wave.frame = geometry.edgeFrame;
+        wave.path = geometry.outer.CGPath;
+        wave.fillRule = kCAFillRuleEvenOdd;
+        wave.fillColor = [color colorWithAlphaComponent:.85].CGColor;
+        wave.opacity = 0;
+        wave.contentsScale = self.window.screen.scale;
+        [pulse addSublayer:wave];
+        CFTimeInterval start = reduce ? 0 : duration*.38*MIN(1,distance/maxDistance);
+        CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+        fade.values = @[@0,@.9,@.65,@0];
+        fade.keyTimes = @[@0,@.18,@.55,@1];
+        fade.beginTime = start;
+        fade.duration = MAX(.14,duration*.48);
+        [wave addAnimation:fade forKey:@"waveFade"];
+        if (!reduce) {
+            CABasicAnimation *grow = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+            grow.fromValue = @.82;
+            grow.toValue = @1.06;
+            grow.beginTime = start;
+            grow.duration = fade.duration;
+            grow.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+            [wave addAnimation:grow forKey:@"keyWaveExpansion"];
+        }
+    }
+}
+
 - (CALayer *)waveUnderCapMask {
     CGFloat screenScale = self.window.screen.scale;
     if (screenScale <= 0) screenScale = 2;
@@ -370,6 +426,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     [self.layer addSublayer:pulse];
     [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
                           duration:duration reduce:reduce];
+    [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
+                         duration:duration reduce:reduce];
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     if (style == 0) {
         // A broad body, bright shoulder and crisp foam crest, followed by a weaker swell.
@@ -528,6 +586,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     CGFloat finalRadius = reduce ? initial : reach;
     [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
                           duration:duration reduce:reduce];
+    [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
+                         duration:duration reduce:reduce];
     UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
     UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-finalRadius,origin.y-finalRadius,finalRadius*2,finalRadius*2)];
     // A 20pt moving band with an 8pt bright core. No Gaussian blur or
