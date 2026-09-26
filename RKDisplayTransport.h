@@ -75,7 +75,7 @@ static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[R
     id theme = prefs[@"Theme"];
     if ([theme isKindOfClass:NSNumber.class] && isfinite([theme doubleValue]) &&
         [theme doubleValue] == [theme integerValue] &&
-        [theme integerValue] >= 0 && [theme integerValue] <= 9) {
+        [theme integerValue] >= 0 && [theme integerValue] <= 13) {
         words[1] |= UINT64_C(1) << 45;
         words[1] |= (uint64_t)[theme integerValue] << 46;
     }
@@ -140,7 +140,7 @@ static inline NSDictionary *RKDecodeDisplaySnapshot(const uint64_t words[RKDispl
 
     if (words[1] & (UINT64_C(1) << 45)) {
         NSUInteger theme = (words[1] >> 46) & 15;
-        if (theme > 9) return nil;
+        if (theme > 13) return nil;
         result[@"Theme"] = @(theme);
     }
     if (words[1] & (UINT64_C(1) << 41)) result[@"PressColorMode"] = @((words[1] >> 42) & 1);
