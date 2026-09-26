@@ -104,7 +104,15 @@ static void RKCandidateStopAnimation(void) {
 }
 
 static NSDictionary *RKCandidateReadPreferences(void) {
-    return RKThemeMergedPreferences(RKReadEffectivePreferences());
+    BOOL dark = NO;
+    for (UIWindow *window in UIApplication.sharedApplication.windows) {
+        if (window.isKeyWindow) {
+            dark = window.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
+            break;
+        }
+    }
+    return RKThemePreferencesForAppearance(
+        RKThemeMergedPreferences(RKReadEffectivePreferences()), dark);
 }
 
 static BOOL RKCandidateRegion(UIView *view) {

@@ -25,6 +25,28 @@ NSDictionary *RKWeChatKeycapThemeDefinition(NSInteger theme) {
         default: return @{@"name":@"关闭"};
     }
 }
+NSDictionary *RKThemePreferencesForAppearance(NSDictionary *preferences, BOOL darkMode) {
+    NSMutableDictionary *result = [preferences mutableCopy] ?: [NSMutableDictionary dictionary];
+    NSInteger theme = [result[@"WeChatTheme"] integerValue];
+    if (!darkMode || theme < 1 || theme > 3) return result;
+
+    NSArray *backgrounds = @[@[@.025,@.065,@.13], @[@.025,@.10,@.09], @[@.14,@.045,@.035]];
+    NSArray *keycaps = @[@[@.11,@.22,@.36], @[@.10,@.27,@.23], @[@.36,@.16,@.12]];
+    NSArray *texts = @[@[@.92,@.97,@1.0], @[@.90,@.98,@.94], @[@1.0,@.91,@.84]];
+    NSArray *pressed = @[@[@.19,@.40,@.63], @[@.17,@.47,@.39], @[@.63,@.28,@.17]];
+    NSArray *candidateStart = @[@[@.55,@.85,@1.0], @[@.52,@.96,@.80], @[@1.0,@.75,@.54]];
+    NSArray *candidateEnd = @[@[@.84,@.94,@1.0], @[@.79,@1.0,@.88], @[@1.0,@.90,@.77]];
+    NSUInteger index = (NSUInteger)(theme - 1);
+    result[@"KeyboardBackgroundColor"] = backgrounds[index];
+    result[@"KeycapColor"] = keycaps[index];
+    result[@"KeycapTextColor"] = texts[index];
+    result[@"KeycapPressedColor"] = pressed[index];
+    result[@"CandidateStart"] = candidateStart[index];
+    result[@"CandidateEnd"] = candidateEnd[index];
+    result[@"CandidateGradient"] = @YES;
+    result[@"CandidateWeType"] = @YES;
+    return result;
+}
 NSDictionary *RKThemeDefinition(NSInteger theme) {
     NSDictionary *definition;
     switch (theme) {

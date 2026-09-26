@@ -6,6 +6,7 @@ extern "C" {
 
 NSDictionary *RKThemeDefinition(NSInteger theme);
 NSDictionary *RKWeChatKeycapThemeDefinition(NSInteger theme);
+NSDictionary *RKThemePreferencesForAppearance(NSDictionary *preferences, BOOL darkMode);
 NSString *RKThemeDisplayName(NSInteger theme);
 NSDictionary *RKThemeMergedPreferences(NSDictionary *preferences);
 

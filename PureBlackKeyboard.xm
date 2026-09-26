@@ -13,6 +13,8 @@
 #import "RKThemeEngine.h"
 
 static NSDictionary *RKBlackPrefs;
+static BOOL RKBlackDarkAppearance;
+static BOOL RKBlackAppearanceReloadQueued;
 static NSHashTable<UIView *> *RKBlackViews;
 static char RKBlackSurfaceKey;
 static char RKBlackKeycapsKey;
@@ -203,7 +205,8 @@ static BOOL RKBlackEnabled(void) {
 }
 
 static void RKBlackReload(void) {
-    NSDictionary *preferences = RKThemeMergedPreferences(RKReadEffectivePreferences());
+    NSDictionary *preferences = RKThemePreferencesForAppearance(
+        RKThemeMergedPreferences(RKReadEffectivePreferences()), RKBlackDarkAppearance);
     if ([RKBlackPrefs isEqual:preferences]) return;
     RKBlackPrefs = preferences;
     RKBlackEnabledValid = NO; // P0-2: 设置变化后让 RKBlackEnabled 缓存失效重算
@@ -1158,6 +1161,15 @@ static void RKScanWeTypeKeys(UIView *node, UIView *host, NSUInteger depth) {
 
 void RKApplyBlackKeyboardHost(UIView *host) {
     if (!host) return;
+    BOOL darkAppearance = host.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
+    if (darkAppearance != RKBlackDarkAppearance && !RKBlackAppearanceReloadQueued) {
+        RKBlackDarkAppearance = darkAppearance;
+        RKBlackAppearanceReloadQueued = YES;
+        dispatch_async(dispatch_get_main_queue(), ^{
+            RKBlackAppearanceReloadQueued = NO;
+            RKBlackReload();
+        });
+    }
     if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) {
         [RKBlackWeTypeHosts addObject:host];
         RKUpdateBlackSurface(host, NO);
