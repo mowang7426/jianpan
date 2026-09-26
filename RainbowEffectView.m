@@ -234,6 +234,55 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     return broadKeys >= 8;
 }
 
+// Native keys need a separate luminous bed: a full-bed mask alone makes the
+// much larger key faces dominate the thin seams, especially on nine-key.
+// Keep this inside the existing pulse so both regions share its fade/limits.
+- (CALayer *)nativeGutterMask {
+    if (!self.keyFrames.count) return nil;
+    CGRect bed = CGRectNull;
+    for (NSValue *value in self.keyFrames) bed = CGRectUnion(bed,value.CGRectValue);
+    CGRect area = CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds);
+    if (CGRectIsNull(area) || CGRectIsEmpty(area)) return nil;
+    UIBezierPath *path = [UIBezierPath bezierPathWithRect:area];
+    for (UIBezierPath *face in self.cachedFacePaths) [path appendPath:face];
+    CAShapeLayer *mask = [CAShapeLayer layer];
+    mask.frame = self.bounds;
+    mask.path = path.CGPath;
+    mask.fillRule = kCAFillRuleEvenOdd;
+    return mask;
+}
+
+- (void)addNativeBedSpreadToPulse:(CALayer *)pulse origin:(CGPoint)origin
+                           reach:(CGFloat)reach color:(UIColor *)color
+                        duration:(CGFloat)duration reduce:(BOOL)reduce {
+    if (![self usesNativeKeycapGlow]) return;
+    CALayer *mask = [self nativeGutterMask];
+    if (!mask) return;
+    CALayer *bed = [CALayer layer];
+    bed.frame = self.bounds;
+    bed.mask = mask;
+    [pulse addSublayer:bed];
+    CAGradientLayer *wash = [CAGradientLayer layer];
+    wash.type = kCAGradientLayerRadial;
+    wash.frame = CGRectMake(origin.x-reach, origin.y-reach, reach*2, reach*2);
+    wash.startPoint = CGPointMake(.5,.5);
+    wash.endPoint = CGPointMake(1,1);
+    wash.colors = @[(id)[color colorWithAlphaComponent:.9].CGColor,
+                    (id)[color colorWithAlphaComponent:.85].CGColor,
+                    (id)[color colorWithAlphaComponent:.58].CGColor,
+                    (id)[color colorWithAlphaComponent:0].CGColor];
+    wash.locations = @[@0,@.3,@.72,@1];
+    [bed addSublayer:wash];
+    if (!reduce) {
+        CABasicAnimation *spread = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        spread.fromValue = @.06;
+        spread.toValue = @1;
+        spread.duration = duration;
+        spread.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        [wash addAnimation:spread forKey:@"nativeBedExpansion"];
+    }
+}
+
 - (CALayer *)waveUnderCapMask {
     CGFloat screenScale = self.window.screen.scale;
     if (screenScale <= 0) screenScale = 2;
@@ -319,6 +368,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     pulse.opacity = 0;
     pulse.mask = mask;
     [self.layer addSublayer:pulse];
+    [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
+                          duration:duration reduce:reduce];
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     if (style == 0) {
         // A broad body, bright shoulder and crisp foam crest, followed by a weaker swell.
@@ -475,6 +526,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if (fast) { reach = MIN(reach,145); duration = .38; }
     CGFloat initial = reduce ? 26 : 5;
     CGFloat finalRadius = reduce ? initial : reach;
+    [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
+                          duration:duration reduce:reduce];
     UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
     UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-finalRadius,origin.y-finalRadius,finalRadius*2,finalRadius*2)];
     // A 20pt moving band with an 8pt bright core. No Gaussian blur or
