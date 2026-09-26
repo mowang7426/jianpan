@@ -264,80 +264,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     return mask;
 }
 // Both effects live in the exposed keyboard bed. Neither outlines keycaps.
-
-// Keycap glow: the same expanding color field as the bed ripple, but clipped
-// to the actual key faces. This is intentionally used only for the native
-// keyboard path; WeType/WeChat remains untouched by showRippleAtPoint:.
-- (void)showKeycapGlowAtPoint:(CGPoint)point hue:(CGFloat)hue
-                   brightness:(CGFloat)brightness opacity:(CGFloat)opacity
-                    duration:(CGFloat)duration reach:(CGFloat)reach
-                         pulse:(CALayer *)pulse {
-    if (UIAccessibilityIsReduceMotionEnabled()) return;
-    if (brightness <= 0 || opacity <= 0 || self.keyFrames.count == 0) return;
-
-    // Build one mask containing every real key face. The glow therefore sits
-    // on top of the keycaps without painting the gaps between keys.
-    CAShapeLayer *mask = [CAShapeLayer layer];
-    mask.frame = self.bounds;
-    UIBezierPath *faces = [UIBezierPath bezierPath];
-    for (NSValue *value in self.keyFrames) {
-        UIBezierPath *face = RKKeyboardKeyFacePath(value.CGRectValue);
-        [faces appendPath:face];
-    }
-    mask.path = faces.CGPath;
-    mask.fillRule = kCAFillRuleNonZero;
-
-    CALayer *glowContainer = [CALayer layer];
-    glowContainer.name = @"RKKeycapGlow";
-    glowContainer.frame = self.bounds;
-    glowContainer.mask = mask;
-    [pulse addSublayer:glowContainer];
-
-    CGFloat radius = MIN(MAX(reach, 80), 260);
-    CAGradientLayer *glow = [CAGradientLayer layer];
-    glow.type = kCAGradientLayerRadial;
-    glow.frame = CGRectMake(point.x - radius, point.y - radius, radius * 2, radius * 2);
-    glow.startPoint = CGPointMake(.5, .5);
-    glow.endPoint = CGPointMake(1, 1);
-
-    UIColor *core = [UIColor colorWithHue:hue
-                              saturation:[self neonSaturation:1]
-                              brightness:MIN(1, brightness * 1.02) alpha:1];
-    UIColor *soft = [UIColor colorWithHue:hue
-                              saturation:[self neonSaturation:.85]
-                              brightness:brightness alpha:1];
-    glow.colors = @[
-        (id)[core colorWithAlphaComponent:MIN(.34, opacity * .52)].CGColor,
-        (id)[soft colorWithAlphaComponent:MIN(.24, opacity * .36)].CGColor,
-        (id)[soft colorWithAlphaComponent:MIN(.10, opacity * .16)].CGColor,
-        (id)[soft colorWithAlphaComponent:0].CGColor
-    ];
-    glow.locations = @[@0, @.28, @.58, @1];
-    glowContainer.opacity = 0;
-    [glowContainer addSublayer:glow];
-
-    // The field expands from the pressed key. Because the container is
-    // masked by key faces, neighboring keycaps light up while the keyboard
-    // gaps remain unchanged.
-    glow.anchorPoint = CGPointMake(.5, .5);
-    glow.position = CGPointMake(point.x, point.y);
-    glow.frame = CGRectMake(point.x - radius, point.y - radius,
-                             radius * 2, radius * 2);
-
-    CAKeyframeAnimation *scale = [CAKeyframeAnimation animationWithKeyPath:@"transform.scale"];
-    scale.values = @[@.04, @.42, @.82, @1.0];
-    scale.keyTimes = @[@0, @.30, @.72, @1];
-    scale.duration = duration;
-    scale.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-    [glow addAnimation:scale forKey:@"keycapGlowExpand"];
-
-    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-    fade.values = @[@0, @1, @.72, @0];
-    fade.keyTimes = @[@0, @.10, @.62, @1];
-    fade.duration = duration;
-    [glowContainer addAnimation:fade forKey:@"keycapGlowFade"];
-}
-
 - (void)showBedEffectAtPoint:(CGPoint)point style:(NSInteger)style {
     CGRect pressed = CGRectNull;
     for (NSValue *value in self.keyFrames) {
@@ -377,11 +303,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     pulse.frame = self.bounds;
     pulse.bounds = self.bounds;
     pulse.opacity = 0;
+    pulse.mask = mask;
     [self.layer addSublayer:pulse];
-    // Native keyboard: add the keycap light field on the same pulse so the
-    // existing diffusion and the new keycap glow stay perfectly synchronized.
-    [self showKeycapGlowAtPoint:origin hue:hue brightness:brightness
-                        opacity:alpha duration:duration reach:reach pulse:pulse];
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     if (style == 0) {
         // A broad body, bright shoulder and crisp foam crest, followed by a weaker swell.
@@ -400,7 +323,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
                 ring.strokeColor = [tint colorWithAlphaComponent:layerAlpha*(i ? .8 : 1)].CGColor;
                 ring.lineWidth = pass == 0 ? 28 : (pass == 1 ? 14 : 3.5);
                 ring.opacity = 0;
-                ring.mask = [mask copy];
                 CGFloat initial = reduce ? 26 : 8;
                 UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
                 UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-reach,origin.y-reach,reach*2,reach*2)];
@@ -434,7 +356,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
             (id)[color colorWithAlphaComponent:.75].CGColor,
             (id)color.CGColor, (id)[color colorWithAlphaComponent:0].CGColor];
         pool.locations = @[@0,@.4,@.72,@1];
-        pool.mask = [mask copy];
         [pulse addSublayer:pool];
         if (!reduce) {
             CABasicAnimation *spread = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
