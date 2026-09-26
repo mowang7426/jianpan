@@ -245,7 +245,7 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"自定义";
     } else if ([key isEqualToString:@"WeChatTheme"]) {
-        NSArray *titles = @[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚"];
+        NSArray *titles = @[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚", @"黑曜深海", @"奶油珊瑚", @"黑白红", @"森林翡翠", @"哆啦A梦"];
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"关闭";
     } else if ([key isEqualToString:@"CandidateGradientMode"]) {
