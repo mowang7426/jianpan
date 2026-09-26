@@ -63,6 +63,22 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>key</key>
+			<string>WeChatTheme</string>
+			<key>action</key>
+			<string>chooseWeChatTheme</string>
+			<key>label</key>
+			<string>微信键帽主题</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.minis.rainbowkeyboard</string>
+			<key>PostNotification</key>
+			<string>com.minis.rainbowkeyboard.changed</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>按键光效</string>

@@ -4,6 +4,26 @@ static NSDictionary *RKTheme(NSString *name, CGFloat sat, CGFloat bright, CGFloa
              @"Spread":@(spread), @"Softness":@(softness), @"CoreStrength":@(core), @"BackgroundStrength":@(bgStrength),
              @"BackgroundRadius":@(bgRadius), @"BackgroundBand":@(bgBand), @"ColorMode":@(colorMode), @"Hue":@(hue)};
 }
+static NSDictionary *RKWeChatKeycapTheme(NSString *name, NSArray *background, NSArray *keycap,
+                                         NSArray *text, NSArray *pressed, NSArray *candidateStart,
+                                         NSArray *candidateEnd) {
+    return @{@"name":name, @"KeyboardBackgroundColor":background, @"KeycapColor":keycap,
+             @"KeycapTextColor":text, @"KeycapPressedColor":pressed,
+             @"CandidateStart":candidateStart, @"CandidateEnd":candidateEnd,
+             @"PressColor":candidateStart, @"PressColorMode":@1,
+             @"PureBlackKeyboard":@YES, @"WeChatKeyboard":@YES};
+}
+NSDictionary *RKWeChatKeycapThemeDefinition(NSInteger theme) {
+    switch (theme) {
+        case 1: return RKWeChatKeycapTheme(@"天空蓝", @[@.35,@.65,@.92], @[@.92,@.96,@.99],
+            @[@.15,@.25,@.40], @[@.75,@.88,@.95], @[@.10,@.65,@.95], @[@.25,@.85,@.95]);
+        case 2: return RKWeChatKeycapTheme(@"极简白", @[@.94,@.94,@.95], @[@.98,@.98,@.98],
+            @[@.20,@.20,@.22], @[@.88,@.88,@.89], @[@.05,@.40,@.85], @[@.10,@.65,@.70]);
+        case 3: return RKWeChatKeycapTheme(@"樱粉紫", @[@.11,@.04,@.16], @[@.28,@.10,@.32],
+            @[@.98,@.88,@.98], @[@.50,@.18,@.58], @[@.98,@.30,@.70], @[@.55,@.30,@.98]);
+        default: return @{@"name":@"关闭"};
+    }
+}
 NSDictionary *RKThemeDefinition(NSInteger theme) {
     NSDictionary *definition;
     switch (theme) {
@@ -57,14 +77,28 @@ NSDictionary *RKThemeDefinition(NSInteger theme) {
 }
 NSString *RKThemeDisplayName(NSInteger theme) { return RKThemeDefinition(theme)[@"name"] ?: @"自定义"; }
 NSDictionary *RKThemeMergedPreferences(NSDictionary *preferences) {
-    NSInteger theme = [preferences[@"Theme"] integerValue];
-    if (theme <= 0) return preferences ?: @{};
     NSMutableDictionary *merged = [preferences mutableCopy] ?: [NSMutableDictionary dictionary];
-    NSDictionary *definition = RKThemeDefinition(theme);
-    if ([definition[@"WeChatOnly"] boolValue] &&
-        ![NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return preferences;
-    [definition enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
-        if (![key isEqualToString:@"name"]) merged[key] = value;
-    }];
+    NSInteger weChatTheme = [preferences[@"WeChatTheme"] integerValue];
+    if (weChatTheme > 0 && [NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) {
+        NSDictionary *keycap = RKWeChatKeycapThemeDefinition(weChatTheme);
+        [keycap enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
+            if (![key isEqualToString:@"name"]) merged[key] = value;
+        }];
+    }
+    NSInteger theme = [preferences[@"Theme"] integerValue];
+    if (theme > 0) {
+        NSDictionary *definition = RKThemeDefinition(theme);
+        if ([definition[@"WeChatOnly"] boolValue] &&
+            ![NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return preferences;
+        [definition enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
+            if (![key isEqualToString:@"name"]) merged[key] = value;
+        }];
+    }
+    if (weChatTheme > 0 && [NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) {
+        NSDictionary *keycap = RKWeChatKeycapThemeDefinition(weChatTheme);
+        [keycap enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
+            if (![key isEqualToString:@"name"]) merged[key] = value;
+        }];
+    }
     return merged;
 }

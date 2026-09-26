@@ -71,6 +71,10 @@ static NSUInteger RKQQAppearanceOverrides;
 static UIColor *RKKeycapColor(void) {
     return RKKeyboardColor(RKBlackPrefs, @"KeycapColor");
 }
+static UIColor *RKKeycapTextColor(void) {
+    return RKBlackPrefs[@"KeycapTextColor"] ?
+        RKKeyboardColor(RKBlackPrefs, @"KeycapTextColor") : UIColor.whiteColor;
+}
 
 static CGImageRef RKCreateKeycapImage(CGImageRef image, BOOL backgroundOnly) {
     NSArray *rgb = RKKeyboardRGB(RKBlackPrefs[@"KeycapColor"]);
@@ -630,9 +634,9 @@ static void RKUpdateBlackLabel(UILabel *label, BOOL enabled) {
     if (enabled) {
         if (![label.textColor isEqual:colors[@"black"]]) {
             objc_setAssociatedObject(label, &RKBlackLabelColorKey,
-                @{@"source":label.textColor ?: UIColor.blackColor, @"black":UIColor.whiteColor},
+                @{@"source":label.textColor ?: UIColor.blackColor, @"black":RKKeycapTextColor()},
                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            label.textColor = UIColor.whiteColor;
+            label.textColor = RKKeycapTextColor();
         }
     } else {
         if ([label.textColor isEqual:colors[@"black"]]) label.textColor = colors[@"source"];
@@ -640,7 +644,7 @@ static void RKUpdateBlackLabel(UILabel *label, BOOL enabled) {
     }
     if (enabled && current && !isWhiteText) {
         NSMutableAttributedString *white = [current mutableCopy];
-        [white addAttribute:NSForegroundColorAttributeName value:UIColor.whiteColor
+        [white addAttribute:NSForegroundColorAttributeName value:RKKeycapTextColor()
             range:NSMakeRange(0, white.length)];
         objc_setAssociatedObject(label, &RKBlackLabelTextKey, @{@"source":current, @"white":white},
             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
