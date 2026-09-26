@@ -80,10 +80,8 @@ static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[R
         words[1] |= (uint64_t)[theme integerValue] << 46;
     }
     id weChatTheme = prefs[@"WeChatTheme"];
-    if ([weChatTheme isKindOfClass:NSNumber.class] && [weChatTheme integerValue] >= 0 && [weChatTheme integerValue] <= 5) {
-        NSInteger value = [weChatTheme integerValue];
-        words[1] |= (uint64_t)MIN(value, 3) << 54;
-        if (value >= 4) words[5] |= UINT64_C(1) | (uint64_t)(value - 4) << 1;
+    if ([weChatTheme isKindOfClass:NSNumber.class] && [weChatTheme integerValue] >= 0 && [weChatTheme integerValue] <= 3) {
+        words[1] |= (uint64_t)[weChatTheme integerValue] << 54;
     }
     id mode = prefs[@"PressColorMode"];
     if ([mode isKindOfClass:NSNumber.class] && isfinite([mode doubleValue])) {
@@ -149,10 +147,7 @@ static inline NSDictionary *RKDecodeDisplaySnapshot(const uint64_t words[RKDispl
         if (theme > 13) return nil;
         result[@"Theme"] = @(theme);
     }
-    NSUInteger weChatTheme = (words[1] >> 54) & 3;
-    if (words[5] & 1) weChatTheme = 4 + ((words[5] >> 1) & 3);
-    if (weChatTheme > 5) return nil;
-    result[@"WeChatTheme"] = @(weChatTheme);
+    result[@"WeChatTheme"] = @((words[1] >> 54) & 3);
     if (words[1] & (UINT64_C(1) << 41)) result[@"PressColorMode"] = @((words[1] >> 42) & 1);
     if (words[1] & (UINT64_C(1) << 43)) {
         uint32_t bits = (uint32_t)(words[14] >> 32);
