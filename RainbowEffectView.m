@@ -204,6 +204,25 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [bloom addAnimation:fade forKey:@"ambientFade"];
     }
 }
+// Conservative native nine-key detection: never change WeType's mask.
+- (BOOL)usesNativeNineKeyBed {
+    if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return NO;
+    BOOL native = NO;
+    for (UIView *v = self.superview; v && ![v isKindOfClass:UIWindow.class]; v = v.superview) {
+        if (RKClassFeatures(v.class) & RKFeatureLayoutStar) { native = YES; break; }
+    }
+    if (!native || self.keyFrames.count < 9 || self.keyFrames.count > 25) return NO;
+    CGFloat width = self.bounds.size.width;
+    if (width <= 0) return NO;
+    NSUInteger broadKeys = 0;
+    for (NSValue *value in self.keyFrames) {
+        CGRect r = value.CGRectValue;
+        if (r.size.width >= width*.14 && r.size.width <= width*.30 &&
+            r.size.height >= 25 && r.size.height <= 85) broadKeys++;
+    }
+    return broadKeys >= 8;
+}
+
 - (CALayer *)waveUnderCapMask {
     CGFloat screenScale = self.window.screen.scale;
     if (screenScale <= 0) screenScale = 2;
@@ -220,9 +239,18 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [[UIColor whiteColor] setFill];
         UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
         CGContextSetBlendMode(context,kCGBlendModeClear);
+        BOOL nativeNine = [self usesNativeNineKeyBed];
         for (NSValue *value in self.keyFrames) {
-            // Full detected rectangles, not shrunken faces: do not brighten text.
-            CGContextFillRect(context,value.CGRectValue);
+            if (nativeNine) {
+                // Native hit cells can tile the whole bed, including gutters.
+                // Use the project's inset key-face model (2pt vertical,
+                // up to 2.5pt horizontal), keeping the central face opaque.
+                UIBezierPath *face = RKKeyboardKeyFacePath(value.CGRectValue);
+                CGContextAddPath(context,face.CGPath);
+                CGContextFillPath(context);
+            } else {
+                CGContextFillRect(context,value.CGRectValue);
+            }
         }
         self.underlightMaskImage = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
@@ -385,9 +413,18 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [[UIColor whiteColor] setFill];
         UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
         CGContextSetBlendMode(context,kCGBlendModeClear);
+        BOOL nativeNine = [self usesNativeNineKeyBed];
         for (NSValue *value in self.keyFrames) {
-            // Full detected rectangles, not shrunken faces: do not brighten text.
-            CGContextFillRect(context,value.CGRectValue);
+            if (nativeNine) {
+                // Native hit cells can tile the whole bed, including gutters.
+                // Use the project's inset key-face model (2pt vertical,
+                // up to 2.5pt horizontal), keeping the central face opaque.
+                UIBezierPath *face = RKKeyboardKeyFacePath(value.CGRectValue);
+                CGContextAddPath(context,face.CGPath);
+                CGContextFillPath(context);
+            } else {
+                CGContextFillRect(context,value.CGRectValue);
+            }
         }
         self.underlightMaskImage = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
