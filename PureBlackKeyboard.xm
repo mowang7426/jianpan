@@ -174,7 +174,7 @@ static CAAnimation *RKKeyColorAnimation(CALayer *layer, CAAnimation *animation) 
 }
 
 static BOOL __attribute__((unused)) RKBlackEnabledForBundle(NSString *bundle) {
-    NSString *keyboard = [bundle.lowercaseString containsString:@"wetype"] ? @"WeChatKeyboard" : @"NativeKeyboard";
+    NSString *keyboard = RKIsWeChatKeyboardProcess(bundle) ? @"WeChatKeyboard" : @"NativeKeyboard";
     for (NSString *key in @[@"Enabled", keyboard, @"PureBlackKeyboard"]) {
         if (RKBlackPrefs[key] && ![RKBlackPrefs[key] boolValue]) return NO;
     }
@@ -191,7 +191,7 @@ static BOOL RKBlackEnabled(void) {
     static NSString *keyboard;
     static dispatch_once_t once;
     dispatch_once(&once, ^{
-        keyboard = [NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"] ?
+        keyboard = RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier) ?
             @"WeChatKeyboard" : @"NativeKeyboard";
     });
     BOOL result = (!RKBlackPrefs[@"Enabled"] || [RKBlackPrefs[@"Enabled"] boolValue]) &&
@@ -735,7 +735,7 @@ static id RKBlackObjectIvar(id object, const char *name) {
 
 // Native-only ownership prevents this compatibility path from touching WeType.
 static BOOL RKNativeKeyboardProcess(NSString *bundle) {
-    return ![bundle.lowercaseString containsString:@"wetype"];
+    return !RKIsWeChatKeyboardProcess(bundle);
 }
 
 static BOOL RKNativeKeyView(UIView *view) {
@@ -1158,7 +1158,7 @@ static void RKScanWeTypeKeys(UIView *node, UIView *host, NSUInteger depth) {
 
 void RKApplyBlackKeyboardHost(UIView *host) {
     if (!host) return;
-    if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) {
+    if (RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) {
         [RKBlackWeTypeHosts addObject:host];
         RKUpdateBlackSurface(host, NO);
         RKUpdateBlackKeycaps(host);
@@ -1268,7 +1268,7 @@ void RKApplyBlackKeyboardHost(UIView *host) {
 - (void)viewDidLayoutSubviews {
     %orig;
 
-    if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"])
+    if (RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier))
         RKApplyBlackKeyboardHost(((UIViewController *)self).view);
 }
 %end
@@ -1958,7 +1958,7 @@ static void RKPublishBlackDiagnostic(void) {
     uint8_t flags = (RKBlackEnabled() ? 1 : 0) | (RKBlackKeyplaneHookInstalled ? 2 : 0) |
         (RKBlackSplitHookInstalled ? 4 : 0) | (RKBlackActionHookInstalled ? 8 : 0) |
         (RKBlackConfigHooksInstalled ? 16 : 0);
-    BOOL weType = [NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"];
+    BOOL weType = RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier);
     int token = RKBlackProbeToken(weType);
     if (token >= 0) notify_set_state(token, RKBlackProbeState(flags,
         RKBlackBackgroundColors + RKBlackBackgroundImages, RKBlackAtlasImages,

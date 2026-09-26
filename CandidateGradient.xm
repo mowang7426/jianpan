@@ -125,7 +125,7 @@ static BOOL RKCandidateFlag(NSString *key) {
     return !RKCandidatePrefs[key] || [RKCandidatePrefs[key] boolValue];
 }
 static BOOL RKCandidateIsWeType(UIView *view) {
-    if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return YES;
+    if (RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return YES;
     Class label = NSClassFromString(@"WBTextItemLabel");
     for (UIView *parent = view; parent; parent = parent.superview)
         if (label && [parent isKindOfClass:label]) return YES;

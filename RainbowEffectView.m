@@ -208,7 +208,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 // Only positively identified native layouts may illuminate key faces.
 // WeType keeps its existing cut-out mask, even if a native-looking view exists.
 - (BOOL)usesNativeKeycapGlow {
-    if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return NO;
+    if (RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return NO;
     for (UIView *v = self.superview; v && ![v isKindOfClass:UIWindow.class]; v = v.superview) {
         if (RKClassFeatures(v.class) & RKFeatureLayoutStar) return YES;
     }
@@ -217,7 +217,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 
 // Conservative native nine-key detection: never change WeType's mask.
 - (BOOL)usesNativeNineKeyBed {
-    if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return NO;
+    if (RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return NO;
     BOOL native = NO;
     for (UIView *v = self.superview; v && ![v isKindOfClass:UIWindow.class]; v = v.superview) {
         if (RKClassFeatures(v.class) & RKFeatureLayoutStar) { native = YES; break; }
@@ -716,7 +716,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Do not perform preference/transport checks on every key press.
     // Input activity is recorded once in sendEvent, before decoration coalescing.
     NSString *bid = NSBundle.mainBundle.bundleIdentifier.lowercaseString ?: @"";
-    BOOL weType = [bid containsString:@"wetype"];
+    BOOL weType = RKIsWeChatKeyboardProcess(bid);
     if (![self flag:@"Enabled"] || ![self flag:@"RippleEnabled"] || ![self flag:weType ? @"WeChatKeyboard" : @"NativeKeyboard"]) {
         for (CALayer *l in self.layer.sublayers.copy) [l removeFromSuperlayer];
         return;
