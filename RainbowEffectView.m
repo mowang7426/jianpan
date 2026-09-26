@@ -346,6 +346,10 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Transparent when finished; bounded pulses (three for ripples), no timer queue.
 }
 
+- (void)showRippleAtPoint:(CGPoint)point {
+    [self showRippleAtPoint:point sourceView:nil];
+}
+
 - (void)clearLegacyKeycapFeedback {
     for (CALayer *layer in self.layer.sublayers.copy) {
         NSString *name = layer.name ?: @"";
