@@ -6,6 +6,7 @@
 #import "RKPreferences.h"
 #import "RKAdaptivePerformance.h"
 #import "RKKeyboardGeometry.h"
+#import "RKThemeEngine.h"
 
 static NSDictionary *RKCandidatePrefs;
 static CGGradientRef RKCandidateCachedGradient;
@@ -103,7 +104,7 @@ static void RKCandidateStopAnimation(void) {
 }
 
 static NSDictionary *RKCandidateReadPreferences(void) {
-    return RKReadEffectivePreferences();
+    return RKThemeMergedPreferences(RKReadEffectivePreferences());
 }
 
 static BOOL RKCandidateRegion(UIView *view) {

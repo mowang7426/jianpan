@@ -186,7 +186,7 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 }
 
 - (void)chooseTheme {
-    NSArray *titles = @[@"自定义", @"🌌 深空", @"💜 极夜紫", @"💙 赛博蓝", @"❤️ 赤焰", @"💚 极光", @"🌈 Rainbow", @"🧊 冰晶", @"🟣 Neon", @"⚡ Cyberpunk"];
+    NSArray *titles = @[@"自定义", @"深空", @"极夜紫", @"赛博蓝", @"赤焰", @"极光", @"Rainbow", @"冰晶", @"Neon", @"Cyberpunk", @"微信·墨夜", @"微信·深海", @"微信·樱粉", @"微信·极简"];
     NSMutableArray *values = [NSMutableArray array];
     for (NSInteger i=0;i<(NSInteger)titles.count;i++) [values addObject:@(i)];
     [self chooseSimpleOptionForKey:@"Theme" title:@"键盘主题" options:titles values:values];
@@ -235,7 +235,7 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
     PSSpecifier *specifier = [self specifierAtIndexPath:indexPath];
     NSString *key = [specifier propertyForKey:@"key"];
     if ([key isEqualToString:@"Theme"]) {
-        NSArray *titles = @[@"自定义", @"🌌 深空", @"💜 极夜紫", @"💙 赛博蓝", @"❤️ 赤焰", @"💚 极光", @"🌈 Rainbow", @"🧊 冰晶", @"🟣 Neon", @"⚡ Cyberpunk"];
+        NSArray *titles = @[@"自定义", @"深空", @"极夜紫", @"赛博蓝", @"赤焰", @"极光", @"Rainbow", @"冰晶", @"Neon", @"Cyberpunk", @"微信·墨夜", @"微信·深海", @"微信·樱粉", @"微信·极简"];
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"自定义";
     } else if ([key isEqualToString:@"CandidateGradientMode"]) {

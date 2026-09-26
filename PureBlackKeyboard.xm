@@ -10,6 +10,7 @@
 #import "RKBlackKeyboard.h"
 #import "RKBlackProbe.h"
 #import "RKKeyboardColors.h"
+#import "RKThemeEngine.h"
 
 static NSDictionary *RKBlackPrefs;
 static NSHashTable<UIView *> *RKBlackViews;
@@ -198,7 +199,7 @@ static BOOL RKBlackEnabled(void) {
 }
 
 static void RKBlackReload(void) {
-    NSDictionary *preferences = RKReadEffectivePreferences();
+    NSDictionary *preferences = RKThemeMergedPreferences(RKReadEffectivePreferences());
     if ([RKBlackPrefs isEqual:preferences]) return;
     RKBlackPrefs = preferences;
     RKBlackEnabledValid = NO; // P0-2: 设置变化后让 RKBlackEnabled 缓存失效重算
