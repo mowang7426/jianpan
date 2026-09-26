@@ -107,10 +107,14 @@ static NSDictionary *RKCandidateReadPreferences(void) {
     BOOL dark = NO;
     for (UIWindow *window in UIApplication.sharedApplication.windows) {
         if (window.isKeyWindow) {
-            dark = window.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
+            UIUserInterfaceStyle style = window.traitCollection.userInterfaceStyle;
+            if (style == UIUserInterfaceStyleUnspecified) style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+            dark = style == UIUserInterfaceStyleDark;
             break;
         }
     }
+    if (!dark && UIApplication.sharedApplication.windows.count == 0)
+        dark = UIScreen.mainScreen.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
     return RKThemePreferencesForAppearance(
         RKThemeMergedPreferences(RKReadEffectivePreferences()), dark);
 }

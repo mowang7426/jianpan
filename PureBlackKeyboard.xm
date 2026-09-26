@@ -131,6 +131,14 @@ static void RKUpdateNativeCompositing(CALayer *layer);
 static void RKUpdateNativeBackdrop(UIView *view);
 static void RKUpdateNativeMultiply(CALayer *layer);
 
+static BOOL RKDarkAppearanceForView(UIView *view) {
+    UIUserInterfaceStyle style = view.traitCollection.userInterfaceStyle;
+    if (style == UIUserInterfaceStyleUnspecified) style = view.window.traitCollection.userInterfaceStyle;
+    if (style == UIUserInterfaceStyleUnspecified) style = UIScreen.mainScreen.traitCollection.userInterfaceStyle;
+    if (style == UIUserInterfaceStyleUnspecified) style = UITraitCollection.currentTraitCollection.userInterfaceStyle;
+    return style == UIUserInterfaceStyleDark;
+}
+
 static void RKQueueKeyboardFaces(UIView *view) {
     RKBlackGeometryRequests++;
     Class layout = NSClassFromString(@"UIKeyboardLayoutStar");
@@ -1161,7 +1169,7 @@ static void RKScanWeTypeKeys(UIView *node, UIView *host, NSUInteger depth) {
 
 void RKApplyBlackKeyboardHost(UIView *host) {
     if (!host) return;
-    BOOL darkAppearance = host.traitCollection.userInterfaceStyle == UIUserInterfaceStyleDark;
+    BOOL darkAppearance = RKDarkAppearanceForView(host);
     if (darkAppearance != RKBlackDarkAppearance && !RKBlackAppearanceReloadQueued) {
         RKBlackDarkAppearance = darkAppearance;
         RKBlackAppearanceReloadQueued = YES;
@@ -1173,7 +1181,8 @@ void RKApplyBlackKeyboardHost(UIView *host) {
     if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) {
         [RKBlackWeTypeHosts addObject:host];
         RKUpdateBlackSurface(host, NO);
-        RKUpdateBlackKeycaps(host);
+        CAShapeLayer *keycaps = objc_getAssociatedObject(host, &RKBlackKeycapsKey);
+        keycaps.hidden = YES;
         RKScanWeTypeKeys(host, host, 0);
     } else {
         Class plane = NSClassFromString(@"UIKBKeyplaneView");
