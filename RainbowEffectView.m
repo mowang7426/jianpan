@@ -31,6 +31,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 @property(nonatomic,strong) NSDictionary *config;
 @property(nonatomic,strong) UIImage *underlightMaskImage;
 @property(nonatomic) CGRect underlightMaskBounds;
+@property(nonatomic) BOOL underlightMaskIncludesNativeFaces;
 @property(nonatomic) CGFloat hue;
 @property(nonatomic) CGFloat pressHue;
 @property(nonatomic,strong) CALayer *fastFeedback;
@@ -204,6 +205,16 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [bloom addAnimation:fade forKey:@"ambientFade"];
     }
 }
+// Only positively identified native layouts may illuminate key faces.
+// WeType keeps its existing cut-out mask, even if a native-looking view exists.
+- (BOOL)usesNativeKeycapGlow {
+    if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return NO;
+    for (UIView *v = self.superview; v && ![v isKindOfClass:UIWindow.class]; v = v.superview) {
+        if (RKClassFeatures(v.class) & RKFeatureLayoutStar) return YES;
+    }
+    return NO;
+}
+
 // Conservative native nine-key detection: never change WeType's mask.
 - (BOOL)usesNativeNineKeyBed {
     if ([NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return NO;
@@ -226,9 +237,11 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 - (CALayer *)waveUnderCapMask {
     CGFloat screenScale = self.window.screen.scale;
     if (screenScale <= 0) screenScale = 2;
-    // Cache an alpha mask of the actual free keyboard bed. Clear operations
-    // form a union of all key faces, so overlapping keys never reopen a hole.
-    if (!self.underlightMaskImage || !CGRectEqualToRect(self.underlightMaskBounds,self.bounds) ||
+    // Native: let the existing wave illuminate both the bed and key faces.
+    // WeType/unknown: retain the original face cut-outs and all animation values.
+    BOOL nativeFaces = [self usesNativeKeycapGlow];
+    if (!self.underlightMaskImage || self.underlightMaskIncludesNativeFaces != nativeFaces ||
+        !CGRectEqualToRect(self.underlightMaskBounds,self.bounds) ||
         self.underlightMaskImage.scale != screenScale) {
         UIGraphicsBeginImageContextWithOptions(self.bounds.size, NO, screenScale);
         CGContextRef context = UIGraphicsGetCurrentContext();
@@ -240,7 +253,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
         CGContextSetBlendMode(context,kCGBlendModeClear);
         BOOL nativeNine = [self usesNativeNineKeyBed];
-        for (NSValue *value in self.keyFrames) {
+        if (!nativeFaces) for (NSValue *value in self.keyFrames) {
             if (nativeNine) {
                 // Native hit cells can tile the whole bed, including gutters.
                 // Use the project's inset key-face model (2pt vertical,
@@ -255,6 +268,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         self.underlightMaskImage = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
         self.underlightMaskBounds = self.bounds;
+        self.underlightMaskIncludesNativeFaces = nativeFaces;
     }
     if (!self.underlightMaskImage) return nil;
     CALayer *mask = [CALayer layer];
@@ -400,9 +414,11 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if (brightness <= 0 || opacity <= 0) return;
     CGFloat screenScale = self.window.screen.scale;
     if (screenScale <= 0) screenScale = 2;
-    // Cache an alpha mask of the actual free keyboard bed. Clear operations
-    // form a union of all key faces, so overlapping keys never reopen a hole.
-    if (!self.underlightMaskImage || !CGRectEqualToRect(self.underlightMaskBounds,self.bounds) ||
+    // Native: let the existing wave illuminate both the bed and key faces.
+    // WeType/unknown: retain the original face cut-outs and all animation values.
+    BOOL nativeFaces = [self usesNativeKeycapGlow];
+    if (!self.underlightMaskImage || self.underlightMaskIncludesNativeFaces != nativeFaces ||
+        !CGRectEqualToRect(self.underlightMaskBounds,self.bounds) ||
         self.underlightMaskImage.scale != screenScale) {
         UIGraphicsBeginImageContextWithOptions(self.bounds.size, NO, screenScale);
         CGContextRef context = UIGraphicsGetCurrentContext();
@@ -414,7 +430,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
         CGContextSetBlendMode(context,kCGBlendModeClear);
         BOOL nativeNine = [self usesNativeNineKeyBed];
-        for (NSValue *value in self.keyFrames) {
+        if (!nativeFaces) for (NSValue *value in self.keyFrames) {
             if (nativeNine) {
                 // Native hit cells can tile the whole bed, including gutters.
                 // Use the project's inset key-face model (2pt vertical,
@@ -429,6 +445,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         self.underlightMaskImage = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
         self.underlightMaskBounds = self.bounds;
+        self.underlightMaskIncludesNativeFaces = nativeFaces;
     }
     if (!self.underlightMaskImage) return;
     BOOL fast = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2;
