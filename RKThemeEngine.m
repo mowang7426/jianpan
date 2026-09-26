@@ -24,11 +24,6 @@ NSDictionary *RKWeChatKeycapThemeDefinition(NSInteger theme) {
         default: return @{@"name":@"关闭"};
     }
 }
-BOOL RKIsWeChatKeyboardProcess(NSString *bundleIdentifier) {
-    NSString *bundle = bundleIdentifier.lowercaseString ?: @"";
-    return [bundle containsString:@"wetype"] || [bundle containsString:@"wechat"] ||
-        [bundle containsString:@"weixin"] || [bundle containsString:@"tencentinput"];
-}
 NSDictionary *RKThemeDefinition(NSInteger theme) {
     NSDictionary *definition;
     switch (theme) {
@@ -84,7 +79,7 @@ NSString *RKThemeDisplayName(NSInteger theme) { return RKThemeDefinition(theme)[
 NSDictionary *RKThemeMergedPreferences(NSDictionary *preferences) {
     NSMutableDictionary *merged = [preferences mutableCopy] ?: [NSMutableDictionary dictionary];
     NSInteger weChatTheme = [preferences[@"WeChatTheme"] integerValue];
-    if (weChatTheme > 0 && RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) {
+    if (weChatTheme > 0 && [NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) {
         NSDictionary *keycap = RKWeChatKeycapThemeDefinition(weChatTheme);
         [keycap enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
             if (![key isEqualToString:@"name"]) merged[key] = value;
@@ -94,12 +89,12 @@ NSDictionary *RKThemeMergedPreferences(NSDictionary *preferences) {
     if (theme > 0) {
         NSDictionary *definition = RKThemeDefinition(theme);
         if ([definition[@"WeChatOnly"] boolValue] &&
-            !RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) return preferences;
+            ![NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) return preferences;
         [definition enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
             if (![key isEqualToString:@"name"]) merged[key] = value;
         }];
     }
-    if (weChatTheme > 0 && RKIsWeChatKeyboardProcess(NSBundle.mainBundle.bundleIdentifier)) {
+    if (weChatTheme > 0 && [NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"]) {
         NSDictionary *keycap = RKWeChatKeycapThemeDefinition(weChatTheme);
         [keycap enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {
             if (![key isEqualToString:@"name"]) merged[key] = value;

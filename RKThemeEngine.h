@@ -6,7 +6,6 @@ extern "C" {
 
 NSDictionary *RKThemeDefinition(NSInteger theme);
 NSDictionary *RKWeChatKeycapThemeDefinition(NSInteger theme);
-BOOL RKIsWeChatKeyboardProcess(NSString *bundleIdentifier);
 NSString *RKThemeDisplayName(NSInteger theme);
 NSDictionary *RKThemeMergedPreferences(NSDictionary *preferences);
 
