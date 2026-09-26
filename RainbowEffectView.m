@@ -426,12 +426,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     [self.layer addSublayer:pulse];
     [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
                           duration:duration reduce:reduce];
-    // Only native Spread (style 1) receives the imported per-key wave.
-    // usesNativeKeycapGlow inside the helper rejects WeType before creating layers.
-    if (style == 1) {
-        [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
-                             duration:duration reduce:reduce];
-    }
+    [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
+                         duration:duration reduce:reduce];
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     if (style == 0) {
         // A broad body, bright shoulder and crisp foam crest, followed by a weaker swell.
@@ -499,6 +495,97 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     life.duration = duration;
     [pulse addAnimation:life forKey:@"bedEffectLifetime"];
     // Transparent when finished; bounded pulses (three for ripples), no timer queue.
+}
+
+// Native-only variant of WeType's spread. Keep showBedEffectAtPoint unchanged.
+- (void)showNativeWeTypeSpreadAtPoint:(CGPoint)point {
+    if (![self usesNativeKeycapGlow]) return;
+    CGRect pressed = CGRectNull;
+    for (NSValue *value in self.keyFrames) {
+        CGRect rect = value.CGRectValue;
+        if (CGRectContainsPoint(rect, point) && (CGRectIsNull(pressed) ||
+            rect.size.width*rect.size.height < pressed.size.width*pressed.size.height)) pressed = rect;
+    }
+    if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
+    // Native hit cells may tile the whole keyboard. Cut out inset faces,
+    // not full hit cells, to preserve the seams on both 9/26-key layouts.
+    CALayer *mask = [self nativeGutterMask];
+    if (!mask) return;
+    CGFloat brightness = [self number:@"Brightness" fallback:.95 low:0 high:1];
+    CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
+    if (brightness <= 0 || alpha <= 0) return;
+    BOOL fast = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2;
+    BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
+    NSUInteger limit = fast ? 1 : 2;
+    while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
+    NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
+    self.hue = fmod(self.hue+.137,1);
+    CGFloat hue = mode == 1 ? [self number:@"Hue" fallback:.55 low:0 high:1] :
+        (mode == 2 ? point.x/MAX(1,self.bounds.size.width) : self.hue);
+    UIColor *color = [UIColor colorWithHue:hue saturation:[self neonSaturation:1] brightness:brightness alpha:1];
+    CGFloat reach = MIN(210,MAX(100,[self number:@"BackgroundRadius" fallback:180 low:60 high:360]));
+    CGFloat duration = MIN(.75,MAX(.42,[self number:@"Duration" fallback:.55 low:.15 high:1.2]));
+    if (fast) { duration = .38; reach = MIN(reach,145); }
+    if (reduce) reach = 32;
+    CGPoint origin = CGPointMake(CGRectGetMidX(pressed),CGRectGetMaxY(pressed)+1);
+    CALayer *pulse = [CALayer layer];
+    pulse.name = @"RKNativeWeTypeSpread";
+    pulse.frame = self.bounds;
+    pulse.bounds = self.bounds;
+    pulse.opacity = 0;
+    [self.layer addSublayer:pulse];
+    CALayer *bed = [CALayer layer];
+    bed.frame = self.bounds;
+    bed.bounds = self.bounds;
+    bed.mask = mask;
+    [pulse addSublayer:bed];
+    // This pool uses the same colors, stops, origin and animation as WeType.
+    CAGradientLayer *pool = [CAGradientLayer layer];
+    pool.type = kCAGradientLayerRadial;
+    pool.frame = CGRectMake(origin.x-reach,origin.y-reach,reach*2,reach*2);
+    pool.startPoint = CGPointMake(.5,.5);
+    pool.endPoint = CGPointMake(1,1);
+    pool.colors = @[(id)[color colorWithAlphaComponent:.38].CGColor,
+        (id)[color colorWithAlphaComponent:.75].CGColor,
+        (id)color.CGColor, (id)[color colorWithAlphaComponent:0].CGColor];
+    pool.locations = @[@0,@.4,@.72,@1];
+    [bed addSublayer:pool];
+    // Only the tapped key gets an additional face-local expansion.
+    UIBezierPath *facePath = RKKeyboardKeyFacePath(pressed);
+    CGRect face = facePath.bounds;
+    CAShapeLayer *capMask = [CAShapeLayer layer];
+    capMask.frame = self.bounds;
+    capMask.path = facePath.CGPath;
+    CALayer *cap = [CALayer layer];
+    cap.frame = self.bounds;
+    cap.bounds = self.bounds;
+    cap.mask = capMask;
+    [pulse addSublayer:cap];
+    CGPoint center = CGPointMake(CGRectGetMidX(face),CGRectGetMidY(face));
+    CGFloat capReach = MAX(1,hypot(face.size.width,face.size.height)*.6);
+    CAGradientLayer *capPool = [CAGradientLayer layer];
+    capPool.type = pool.type;
+    capPool.frame = CGRectMake(center.x-capReach,center.y-capReach,capReach*2,capReach*2);
+    capPool.startPoint = pool.startPoint;
+    capPool.endPoint = pool.endPoint;
+    capPool.colors = pool.colors;
+    capPool.locations = pool.locations;
+    [cap addSublayer:capPool];
+    if (!reduce) {
+        CABasicAnimation *spread = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        spread.fromValue = @.06; spread.toValue = @1;
+        spread.duration = duration;
+        spread.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        [pool addAnimation:spread forKey:@"bedSpreadTravel"];
+        [capPool addAnimation:spread forKey:@"pressedCapSpreadTravel"];
+    }
+    CAKeyframeAnimation *life = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    CGFloat peak = MIN(1,alpha*1.35);
+    life.values = @[@0,@(peak),@(peak),@0];
+    life.keyTimes = @[@0,@.06,@.65,@1];
+    life.duration = duration;
+    [pulse addAnimation:life forKey:@"bedEffectLifetime"];
+    // Shared lifetime and eviction: no timers, snapshots or per-neighbor waves.
 }
 
 - (void)showRippleAtPoint:(CGPoint)point {
@@ -590,6 +677,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     CGFloat finalRadius = reduce ? initial : reach;
     [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
                           duration:duration reduce:reduce];
+    [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
+                         duration:duration reduce:reduce];
     UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
     UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-finalRadius,origin.y-finalRadius,finalRadius*2,finalRadius*2)];
     // A 20pt moving band with an 8pt bright core. No Gaussian blur or
@@ -640,6 +729,10 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if (style != self.lastStyle) {
         for (CALayer *layer in self.layer.sublayers.copy) [layer removeFromSuperlayer];
         self.lastStyle = style;
+    }
+    if (style == 1 && !weType && [self usesNativeKeycapGlow]) {
+        [self showNativeWeTypeSpreadAtPoint:point];
+        return;
     }
     if (style == 3) {
         [self showCrispUnderlightAtPoint:point];
