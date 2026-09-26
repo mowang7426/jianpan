@@ -194,8 +194,8 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 }
 - (void)chooseWeChatTheme {
     [self chooseSimpleOptionForKey:@"WeChatTheme" title:@"微信键帽主题"
-                           options:@[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚"]
-                             values:@[@0, @1, @2, @3]];
+                           options:@[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚", @"黑曜深海", @"奶油珊瑚", @"黑白红", @"森林翡翠", @"哆啦A梦"]
+                             values:@[@0, @1, @2, @3, @4, @5, @6, @7, @8]];
 }
 - (void)chooseCandidateGradientMode {
     [self chooseSimpleOptionForKey:@"CandidateGradientMode" title:@"候选栏渐变" options:@[@"关闭", @"静态渐变", @"流动渐变", @"呼吸渐变", @"彩虹渐变", @"跟随输入"] values:@[@0,@1,@2,@3,@4,@5]];
