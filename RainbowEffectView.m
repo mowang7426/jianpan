@@ -497,6 +497,140 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Transparent when finished; bounded pulses (three for ripples), no timer queue.
 }
 
+- (CGRect)pressedKeyAtPoint:(CGPoint)point {
+    CGRect pressed = CGRectNull;
+    for (NSValue *value in self.keyFrames) {
+        CGRect rect = value.CGRectValue;
+        if (CGRectContainsPoint(rect, point) && (CGRectIsNull(pressed) ||
+            rect.size.width * rect.size.height < pressed.size.width * pressed.size.height)) pressed = rect;
+    }
+    return pressed;
+}
+
+- (void)showBreathingGlowAtPoint:(CGPoint)point {
+    CGRect pressed = [self pressedKeyAtPoint:point];
+    if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
+    CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
+    CGFloat brightness = [self number:@"Brightness" fallback:.95 low:0 high:1];
+    if (alpha <= 0 || brightness <= 0) return;
+    BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
+    NSUInteger limit = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2 ? 1 : 2;
+    while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
+    self.hue = fmod(self.hue + .137, 1);
+    NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
+    CGFloat hue = mode == 1 ? [self number:@"Hue" fallback:.55 low:0 high:1] : self.hue;
+    UIColor *color = [UIColor colorWithHue:hue saturation:[self neonSaturation:.9] brightness:brightness alpha:1];
+    CALayer *pulse = [CALayer layer];
+    pulse.name = @"RKBreathingGlow";
+    pulse.frame = self.bounds;
+    pulse.mask = [self waveUnderCapMask];
+    [self.layer addSublayer:pulse];
+    CAGradientLayer *glow = [CAGradientLayer layer];
+    CGFloat radius = MAX(32, MIN(120, MAX(pressed.size.width, pressed.size.height) * 2.8));
+    CGPoint center = CGPointMake(CGRectGetMidX(pressed), CGRectGetMidY(pressed));
+    glow.type = kCAGradientLayerRadial;
+    glow.frame = CGRectMake(center.x - radius, center.y - radius, radius * 2, radius * 2);
+    glow.startPoint = CGPointMake(.5, .5);
+    glow.endPoint = CGPointMake(1, 1);
+    glow.colors = @[(id)[color colorWithAlphaComponent:alpha].CGColor,
+        (id)[color colorWithAlphaComponent:alpha * .28].CGColor,
+        (id)[color colorWithAlphaComponent:0].CGColor];
+    glow.locations = @[@0, @.42, @1];
+    [pulse addSublayer:glow];
+    CGFloat duration = [self number:@"Duration" fallback:.55 low:.15 high:1.2];
+    if (reduce) duration = .18;
+    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    fade.values = @[@0, @1, @.52, @0];
+    fade.keyTimes = @[@0, @.2, @.62, @1];
+    fade.duration = duration;
+    [pulse addAnimation:fade forKey:@"breathingFade"];
+    if (!reduce) {
+        CABasicAnimation *scale = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        scale.fromValue = @.72;
+        scale.toValue = @1.12;
+        scale.duration = duration;
+        scale.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        [glow addAnimation:scale forKey:@"breathingScale"];
+    }
+}
+
+- (void)showStarTrailAtPoint:(CGPoint)point {
+    CGRect pressed = [self pressedKeyAtPoint:point];
+    if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
+    CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
+    CGFloat brightness = [self number:@"Brightness" fallback:.95 low:0 high:1];
+    if (alpha <= 0 || brightness <= 0) return;
+    NSUInteger limit = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2 ? 1 : 2;
+    while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
+    self.hue = fmod(self.hue + .19, 1);
+    UIColor *color = [UIColor colorWithHue:self.hue saturation:[self neonSaturation:1] brightness:brightness alpha:alpha];
+    CALayer *trail = [CALayer layer];
+    trail.name = @"RKStarTrail";
+    trail.frame = self.bounds;
+    [self.layer addSublayer:trail];
+    CGFloat duration = [self number:@"Duration" fallback:.55 low:.15 high:1.2];
+    CGFloat startX = CGRectGetMidX(pressed) - pressed.size.width * 1.8;
+    CGFloat y = CGRectGetMidY(pressed);
+    for (NSUInteger i = 0; i < 3; i++) {
+        CGFloat size = MAX(3, 8 - i * 1.5);
+        CALayer *star = [CALayer layer];
+        star.frame = CGRectMake(startX - i * size * 1.4, y - size / 2, size, size);
+        star.cornerRadius = size / 2;
+        star.backgroundColor = [color colorWithAlphaComponent:1 - i * .22].CGColor;
+        [trail addSublayer:star];
+        CABasicAnimation *move = [CABasicAnimation animationWithKeyPath:@"transform.translation.x"];
+        move.fromValue = @0;
+        move.toValue = @(pressed.size.width * 3.8);
+        move.beginTime = i * duration * .08;
+        move.duration = duration;
+        [star addAnimation:move forKey:@"starTravel"];
+        CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+        fade.values = @[@0, @1, @.75, @0];
+        fade.keyTimes = @[@0, @.12, @.55, @1];
+        fade.beginTime = move.beginTime;
+        fade.duration = duration;
+        [star addAnimation:fade forKey:@"starFade"];
+    }
+}
+
+- (void)showColorPulseAtPoint:(CGPoint)point {
+    CGRect pressed = [self pressedKeyAtPoint:point];
+    CALayer *mask = [self waveUnderCapMask];
+    if (CGRectIsNull(pressed) || !mask) return;
+    CGFloat brightness = [self number:@"Brightness" fallback:.95 low:0 high:1];
+    CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
+    CGFloat duration = [self number:@"Duration" fallback:.55 low:.15 high:1.2];
+    if (brightness <= 0 || alpha <= 0) return;
+    NSUInteger limit = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2 ? 1 : 2;
+    while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
+    self.hue = fmod(self.hue + .11, 1);
+    UIColor *first = [UIColor colorWithHue:self.hue saturation:[self neonSaturation:1] brightness:brightness alpha:alpha];
+    UIColor *last = [UIColor colorWithHue:fmod(self.hue + .22, 1) saturation:[self neonSaturation:.85] brightness:brightness alpha:0];
+    CALayer *pulse = [CALayer layer];
+    pulse.name = @"RKColorPulse";
+    pulse.frame = self.bounds;
+    pulse.mask = mask;
+    [self.layer addSublayer:pulse];
+    CAGradientLayer *band = [CAGradientLayer layer];
+    band.frame = CGRectMake(-self.bounds.size.width, 0, self.bounds.size.width * 2, self.bounds.size.height);
+    band.startPoint = CGPointMake(0, .5);
+    band.endPoint = CGPointMake(1, .5);
+    band.colors = @[(id)last.CGColor, (id)first.CGColor, (id)last.CGColor];
+    band.locations = @[@0, @.5, @1];
+    [pulse addSublayer:band];
+    CABasicAnimation *travel = [CABasicAnimation animationWithKeyPath:@"transform.translation.x"];
+    travel.fromValue = @(-self.bounds.size.width);
+    travel.toValue = @(self.bounds.size.width);
+    travel.duration = duration;
+    travel.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    [band addAnimation:travel forKey:@"colorPulseTravel"];
+    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    fade.values = @[@0, @1, @.72, @0];
+    fade.keyTimes = @[@0, @.12, @.7, @1];
+    fade.duration = duration;
+    [pulse addAnimation:fade forKey:@"colorPulseFade"];
+}
+
 // Native-only variant of WeType's spread. Keep showBedEffectAtPoint unchanged.
 - (void)showNativeWeTypeSpreadAtPoint:(CGPoint)point {
     if (![self usesNativeKeycapGlow]) return;
@@ -722,9 +856,9 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         return;
     }
     if (!self.window || self.hidden) return;
-    NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:3];
+    NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:6];
     // Bed-only styles must not coexist with a captured keycap feedback layer.
-    if (style == 0 || style == 1 || style == 3) [self clearLegacyKeycapFeedback];
+    if (style == 0 || style == 1 || style >= 3) [self clearLegacyKeycapFeedback];
     // Keep the user's original configured style; adaptive mode only reduces work.
     if (style != self.lastStyle) {
         for (CALayer *layer in self.layer.sublayers.copy) [layer removeFromSuperlayer];
@@ -736,6 +870,18 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     }
     if (style == 3) {
         [self showCrispUnderlightAtPoint:point];
+        return;
+    }
+    if (style == 4) {
+        [self showStarTrailAtPoint:point];
+        return;
+    }
+    if (style == 5) {
+        [self showBreathingGlowAtPoint:point];
+        return;
+    }
+    if (style == 6) {
+        [self showColorPulseAtPoint:point];
         return;
     }
     if (style == 0 || style == 1) {
