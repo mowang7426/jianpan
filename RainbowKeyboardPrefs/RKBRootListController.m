@@ -204,7 +204,7 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 - (void)chooseEffectStyle {
         [self chooseSimpleOptionForKey:@"EffectStyle"
                              title:@"光效风格"
-                           options:@[@"波纹", @"扩散", @"轻弹", @"流光底韵", @"星轨流光", @"呼吸辉光", @"彩色脉冲"]
+                           options:@[@"波纹", @"扩散", @"轻弹", @"流光底韵", @"极光扫光", @"玻璃闪耀", @"流彩呼吸"]
                             values:@[@0, @1, @2, @3, @4, @5, @6]];
 }
 
@@ -253,7 +253,7 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"静态渐变";
     } else if ([key isEqualToString:@"EffectStyle"]) {
-        NSArray *titles = @[@"波纹", @"扩散", @"轻弹", @"流光底韵", @"星轨流光", @"呼吸辉光", @"彩色脉冲"];
+        NSArray *titles = @[@"波纹", @"扩散", @"轻弹", @"流光底韵", @"极光扫光", @"玻璃闪耀", @"流彩呼吸"];
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"波纹";
     } else if ([key isEqualToString:@"ColorMode"]) {

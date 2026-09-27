@@ -537,6 +537,15 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         (id)[color colorWithAlphaComponent:0].CGColor];
     glow.locations = @[@0, @.42, @1];
     [pulse addSublayer:glow];
+    CAShapeLayer *highlight = [CAShapeLayer layer];
+    highlight.name = @"RKGlassHighlight";
+    highlight.frame = self.bounds;
+    highlight.path = RKKeyboardKeyFacePath(pressed).CGPath;
+    highlight.fillColor = [color colorWithAlphaComponent:.12].CGColor;
+    highlight.strokeColor = [color colorWithAlphaComponent:MIN(1, alpha * 1.25)].CGColor;
+    highlight.lineWidth = 1.5;
+    highlight.opacity = 0;
+    [self.layer addSublayer:highlight];
     CGFloat duration = [self number:@"Duration" fallback:.55 low:.15 high:1.2];
     if (reduce) duration = .18;
     CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
@@ -544,6 +553,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     fade.keyTimes = @[@0, @.2, @.62, @1];
     fade.duration = duration;
     [pulse addAnimation:fade forKey:@"breathingFade"];
+    [highlight addAnimation:fade forKey:@"glassHighlightFade"];
     if (!reduce) {
         CABasicAnimation *scale = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
         scale.fromValue = @.72;
@@ -562,35 +572,38 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if (alpha <= 0 || brightness <= 0) return;
     NSUInteger limit = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2 ? 1 : 2;
     while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
-    self.hue = fmod(self.hue + .19, 1);
-    UIColor *color = [UIColor colorWithHue:self.hue saturation:[self neonSaturation:1] brightness:brightness alpha:alpha];
-    CALayer *trail = [CALayer layer];
-    trail.name = @"RKStarTrail";
-    trail.frame = self.bounds;
-    [self.layer addSublayer:trail];
+    self.hue = fmod(self.hue + .13, 1);
+    UIColor *start = [UIColor colorWithHue:self.hue saturation:[self neonSaturation:.72] brightness:brightness alpha:0];
+    UIColor *core = [UIColor colorWithHue:self.hue saturation:[self neonSaturation:1] brightness:brightness alpha:alpha];
+    UIColor *end = [UIColor colorWithHue:fmod(self.hue + .16, 1) saturation:[self neonSaturation:.78] brightness:brightness alpha:0];
+    CALayer *beam = [CALayer layer];
+    beam.name = @"RKAuroraSweep";
+    beam.frame = self.bounds;
+    beam.mask = [self waveUnderCapMask];
+    [self.layer addSublayer:beam];
+    CAGradientLayer *band = [CAGradientLayer layer];
+    band.frame = CGRectMake(-self.bounds.size.width * .8, -self.bounds.size.height * .25,
+                            self.bounds.size.width * 1.6, self.bounds.size.height * 1.5);
+    band.startPoint = CGPointMake(0, .5);
+    band.endPoint = CGPointMake(1, .5);
+    band.colors = @[(id)start.CGColor, (id)core.CGColor,
+        (id)[core colorWithAlphaComponent:.45].CGColor, (id)end.CGColor];
+    band.locations = @[@0, @.42, @.57, @1];
+    band.transform = CATransform3DMakeRotation(-.16, 0, 0, 1);
+    [beam addSublayer:band];
     CGFloat duration = [self number:@"Duration" fallback:.55 low:.15 high:1.2];
-    CGFloat startX = CGRectGetMidX(pressed) - pressed.size.width * 1.8;
-    CGFloat y = CGRectGetMidY(pressed);
-    for (NSUInteger i = 0; i < 3; i++) {
-        CGFloat size = MAX(3, 8 - i * 1.5);
-        CALayer *star = [CALayer layer];
-        star.frame = CGRectMake(startX - i * size * 1.4, y - size / 2, size, size);
-        star.cornerRadius = size / 2;
-        star.backgroundColor = [color colorWithAlphaComponent:1 - i * .22].CGColor;
-        [trail addSublayer:star];
-        CABasicAnimation *move = [CABasicAnimation animationWithKeyPath:@"transform.translation.x"];
-        move.fromValue = @0;
-        move.toValue = @(pressed.size.width * 3.8);
-        move.beginTime = i * duration * .08;
-        move.duration = duration;
-        [star addAnimation:move forKey:@"starTravel"];
-        CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-        fade.values = @[@0, @1, @.75, @0];
-        fade.keyTimes = @[@0, @.12, @.55, @1];
-        fade.beginTime = move.beginTime;
-        fade.duration = duration;
-        [star addAnimation:fade forKey:@"starFade"];
-    }
+    if (UIAccessibilityIsReduceMotionEnabled()) duration = .16;
+    CABasicAnimation *sweep = [CABasicAnimation animationWithKeyPath:@"transform.translation.x"];
+    sweep.fromValue = @(-self.bounds.size.width * .9);
+    sweep.toValue = @(self.bounds.size.width * 1.6);
+    sweep.duration = duration;
+    sweep.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+    [band addAnimation:sweep forKey:@"auroraSweep"];
+    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    fade.values = @[@0, @.9, @.7, @0];
+    fade.keyTimes = @[@0, @.18, @.62, @1];
+    fade.duration = duration;
+    [beam addAnimation:fade forKey:@"auroraFade"];
 }
 
 - (void)showColorPulseAtPoint:(CGPoint)point {
@@ -603,32 +616,37 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if (brightness <= 0 || alpha <= 0) return;
     NSUInteger limit = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2 ? 1 : 2;
     while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
-    self.hue = fmod(self.hue + .11, 1);
-    UIColor *first = [UIColor colorWithHue:self.hue saturation:[self neonSaturation:1] brightness:brightness alpha:alpha];
-    UIColor *last = [UIColor colorWithHue:fmod(self.hue + .22, 1) saturation:[self neonSaturation:.85] brightness:brightness alpha:0];
+    self.hue = fmod(self.hue + .08, 1);
+    UIColor *first = [UIColor colorWithHue:self.hue saturation:[self neonSaturation:.88] brightness:brightness alpha:alpha * .72];
+    UIColor *middle = [UIColor colorWithHue:fmod(self.hue + .12, 1) saturation:[self neonSaturation:.8] brightness:brightness alpha:alpha];
+    UIColor *last = [UIColor colorWithHue:fmod(self.hue + .24, 1) saturation:[self neonSaturation:.78] brightness:brightness alpha:alpha * .42];
     CALayer *pulse = [CALayer layer];
-    pulse.name = @"RKColorPulse";
+    pulse.name = @"RKColorBreath";
     pulse.frame = self.bounds;
     pulse.mask = mask;
     [self.layer addSublayer:pulse];
-    CAGradientLayer *band = [CAGradientLayer layer];
-    band.frame = CGRectMake(-self.bounds.size.width, 0, self.bounds.size.width * 2, self.bounds.size.height);
-    band.startPoint = CGPointMake(0, .5);
-    band.endPoint = CGPointMake(1, .5);
-    band.colors = @[(id)last.CGColor, (id)first.CGColor, (id)last.CGColor];
-    band.locations = @[@0, @.5, @1];
-    [pulse addSublayer:band];
-    CABasicAnimation *travel = [CABasicAnimation animationWithKeyPath:@"transform.translation.x"];
-    travel.fromValue = @(-self.bounds.size.width);
-    travel.toValue = @(self.bounds.size.width);
-    travel.duration = duration;
-    travel.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-    [band addAnimation:travel forKey:@"colorPulseTravel"];
+    CAGradientLayer *field = [CAGradientLayer layer];
+    field.frame = CGRectInset(self.bounds, -self.bounds.size.width * .18, -self.bounds.size.height * .25);
+    field.startPoint = CGPointMake(0, .15);
+    field.endPoint = CGPointMake(1, .85);
+    field.colors = @[(id)first.CGColor, (id)middle.CGColor, (id)last.CGColor];
+    field.locations = @[@0, @.52, @1];
+    [pulse addSublayer:field];
+    BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
+    if (!reduce) {
+        CABasicAnimation *scale = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        scale.fromValue = @.94;
+        scale.toValue = @1.06;
+        scale.duration = duration;
+        scale.autoreverses = YES;
+        scale.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
+        [field addAnimation:scale forKey:@"colorBreathScale"];
+    }
     CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-    fade.values = @[@0, @1, @.72, @0];
-    fade.keyTimes = @[@0, @.12, @.7, @1];
-    fade.duration = duration;
-    [pulse addAnimation:fade forKey:@"colorPulseFade"];
+    fade.values = @[@0, @.82, @.58, @0];
+    fade.keyTimes = @[@0, @.22, @.68, @1];
+    fade.duration = reduce ? .16 : duration * 1.15;
+    [pulse addAnimation:fade forKey:@"colorBreathFade"];
 }
 
 // Native-only variant of WeType's spread. Keep showBedEffectAtPoint unchanged.
