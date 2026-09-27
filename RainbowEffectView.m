@@ -524,90 +524,77 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     CALayer *effect = [CALayer layer];
     effect.name = [NSString stringWithFormat:@"RKGalaxyFeedback%ld", (long)variant];
     effect.frame = self.bounds;
-    CAShapeLayer *keyMask = [CAShapeLayer layer];
-    keyMask.frame = self.bounds;
-    keyMask.path = path.CGPath;
-    effect.mask = keyMask;
     [self.layer addSublayer:effect];
 
     CAShapeLayer *face = [CAShapeLayer layer];
     face.frame = self.bounds;
     face.path = path.CGPath;
-    face.fillColor = [tint colorWithAlphaComponent:variant == 2 ? .16 : .08].CGColor;
-    face.strokeColor = [tint colorWithAlphaComponent:.72].CGColor;
-    face.lineWidth = variant == 1 ? 1.35 : 1.0;
+    face.fillColor = UIColor.clearColor.CGColor;
+    face.strokeColor = [tint colorWithAlphaComponent:.16].CGColor;
+    face.lineWidth = 1.0;
     [effect addSublayer:face];
 
     CGFloat duration = [self number:@"Duration" fallback:.55 low:.15 high:1.2];
     if (UIAccessibilityIsReduceMotionEnabled()) duration = .14;
-    if (variant == 0) {
-        CAShapeLayer *dust = [CAShapeLayer layer];
-        dust.frame = self.bounds;
-        UIBezierPath *stars = [UIBezierPath bezierPath];
-        NSArray *points = @[
-            [NSValue valueWithCGPoint:CGPointMake(CGRectGetMinX(pressed) + pressed.size.width * .22, CGRectGetMinY(pressed) + pressed.size.height * .28)],
-            [NSValue valueWithCGPoint:CGPointMake(CGRectGetMinX(pressed) + pressed.size.width * .67, CGRectGetMinY(pressed) + pressed.size.height * .2)],
-            [NSValue valueWithCGPoint:CGPointMake(CGRectGetMinX(pressed) + pressed.size.width * .78, CGRectGetMinY(pressed) + pressed.size.height * .7)],
-            [NSValue valueWithCGPoint:CGPointMake(CGRectGetMinX(pressed) + pressed.size.width * .38, CGRectGetMinY(pressed) + pressed.size.height * .75)]];
-        for (NSValue *value in points) {
-            CGPoint star = value.CGPointValue;
-            [stars appendPath:[UIBezierPath bezierPathWithOvalInRect:CGRectMake(star.x - 1.4, star.y - 1.4, 2.8, 2.8)]];
-        }
-        dust.path = stars.CGPath;
-        dust.fillColor = [UIColor colorWithWhite:1 alpha:.95].CGColor;
-        dust.shadowColor = tint.CGColor;
-        dust.shadowRadius = 4;
-        dust.shadowOpacity = .9;
-        dust.shadowOffset = CGSizeZero;
-        [effect addSublayer:dust];
-        CAKeyframeAnimation *twinkle = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-        twinkle.values = @[@0, @1, @.3, @1, @0];
-        twinkle.keyTimes = @[@0, @.22, @.5, @.7, @1];
-        twinkle.duration = duration;
-        [dust addAnimation:twinkle forKey:@"galaxyDustTwinkle"];
-    } else if (variant == 1) {
-        CAShapeLayer *orbit = [CAShapeLayer layer];
-        orbit.frame = self.bounds;
-        UIBezierPath *arc = [UIBezierPath bezierPath];
-        [arc moveToPoint:CGPointMake(CGRectGetMinX(pressed) - pressed.size.width * .15, CGRectGetMaxY(pressed) - pressed.size.height * .12)];
-        [arc addCurveToPoint:CGPointMake(CGRectGetMaxX(pressed) + pressed.size.width * .15, CGRectGetMinY(pressed) + pressed.size.height * .18)
-                 controlPoint1:CGPointMake(CGRectGetMinX(pressed) + pressed.size.width * .25, CGRectGetMinY(pressed) - pressed.size.height * .35)
-                 controlPoint2:CGPointMake(CGRectGetMaxX(pressed) - pressed.size.width * .15, CGRectGetMaxY(pressed) + pressed.size.height * .35)];
-        orbit.path = arc.CGPath;
-        orbit.fillColor = UIColor.clearColor.CGColor;
-        orbit.strokeColor = [tint colorWithAlphaComponent:.95].CGColor;
-        orbit.lineWidth = 1.6;
-        orbit.lineCap = kCALineCapRound;
-        [effect addSublayer:orbit];
-        CABasicAnimation *draw = [CABasicAnimation animationWithKeyPath:@"strokeEnd"];
-        draw.fromValue = @0;
-        draw.toValue = @1;
-        draw.duration = duration;
-        draw.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-        [orbit addAnimation:draw forKey:@"galaxyOrbitDraw"];
-    } else {
-        CAGradientLayer *core = [CAGradientLayer layer];
-        core.type = kCAGradientLayerRadial;
-        CGFloat radius = MAX(14, MIN(42, MAX(pressed.size.width, pressed.size.height) * .8));
-        CGPoint center = CGPointMake(CGRectGetMidX(pressed), CGRectGetMidY(pressed));
-        core.frame = CGRectMake(center.x - radius, center.y - radius, radius * 2, radius * 2);
-        core.startPoint = CGPointMake(.5, .5);
-        core.endPoint = CGPointMake(1, .5);
-        core.colors = @[(__bridge id)[UIColor colorWithWhite:1 alpha:.9].CGColor,
-            (__bridge id)[tint colorWithAlphaComponent:.75].CGColor,
-            (__bridge id)[tint colorWithAlphaComponent:0].CGColor];
-        core.locations = @[@0, @.22, @1];
-        CAShapeLayer *mask = [CAShapeLayer layer];
-        mask.frame = self.bounds;
-        mask.path = path.CGPath;
-        core.mask = mask;
-        [effect addSublayer:core];
-        CABasicAnimation *pulse = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-        pulse.fromValue = @.45;
-        pulse.toValue = @1.25;
-        pulse.duration = duration;
-        pulse.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-        [core addAnimation:pulse forKey:@"galaxyCorePulse"];
+    CGFloat bottom = CGRectGetMaxY(pressed);
+    CGFloat centerX = CGRectGetMidX(pressed);
+    CGFloat reach = MAX(34, MIN(110, pressed.size.width * (variant == 1 ? 1.8 : 1.45)));
+    CGFloat height = MAX(28, MIN(96, pressed.size.height * (variant == 2 ? 2.2 : 1.65)));
+    CGPoint origin = CGPointMake(centerX, bottom + height * .12);
+    CAGradientLayer *glow = [CAGradientLayer layer];
+    glow.type = kCAGradientLayerRadial;
+    glow.frame = CGRectMake(origin.x - reach, bottom - height * .18, reach * 2, height);
+    glow.startPoint = CGPointMake(.5, .08);
+    glow.endPoint = CGPointMake(1, .72);
+    glow.colors = @[(__bridge id)[tint colorWithAlphaComponent:variant == 2 ? .98 : .86].CGColor,
+                    (__bridge id)[tint colorWithAlphaComponent:variant == 1 ? .7 : .52].CGColor,
+                    (__bridge id)[tint colorWithAlphaComponent:0].CGColor];
+    glow.locations = @[@0, @.28, @1];
+    [effect addSublayer:glow];
+
+    CAGradientLayer *underbar = [CAGradientLayer layer];
+    underbar.frame = CGRectMake(CGRectGetMinX(pressed) - pressed.size.width * .45,
+                                bottom - 1.5, pressed.size.width * 1.9, variant == 2 ? 5 : 3);
+    underbar.startPoint = CGPointMake(0, .5);
+    underbar.endPoint = CGPointMake(1, .5);
+    underbar.colors = @[(__bridge id)[tint colorWithAlphaComponent:0].CGColor,
+                        (__bridge id)[tint colorWithAlphaComponent:variant == 2 ? 1 : .9].CGColor,
+                        (__bridge id)[tint colorWithAlphaComponent:0].CGColor];
+    underbar.locations = @[@0, @.5, @1];
+    underbar.shadowColor = tint.CGColor;
+    underbar.shadowRadius = variant == 2 ? 14 : 9;
+    underbar.shadowOpacity = 1;
+    [effect addSublayer:underbar];
+
+    if (variant == 1) {
+        CAShapeLayer *arc = [CAShapeLayer layer];
+        arc.frame = self.bounds;
+        UIBezierPath *path = [UIBezierPath bezierPath];
+        [path moveToPoint:CGPointMake(CGRectGetMinX(pressed) - pressed.size.width * .35, bottom + height * .58)];
+        [path addCurveToPoint:CGPointMake(CGRectGetMaxX(pressed) + pressed.size.width * .35, bottom + height * .58)
+                 controlPoint1:CGPointMake(CGRectGetMinX(pressed) + pressed.size.width * .25, bottom + height * .05)
+                 controlPoint2:CGPointMake(CGRectGetMaxX(pressed) - pressed.size.width * .25, bottom + height * 1.05)];
+        arc.path = path.CGPath;
+        arc.fillColor = UIColor.clearColor.CGColor;
+        arc.strokeColor = [tint colorWithAlphaComponent:.95].CGColor;
+        arc.lineWidth = 2.4;
+        arc.lineCap = kCALineCapRound;
+        arc.shadowColor = tint.CGColor;
+        arc.shadowRadius = 8;
+        arc.shadowOpacity = 1;
+        [effect addSublayer:arc];
+        CABasicAnimation *travel = [CABasicAnimation animationWithKeyPath:@"strokeEnd"];
+        travel.fromValue = @0;
+        travel.toValue = @1;
+        travel.duration = duration;
+        [arc addAnimation:travel forKey:@"galaxyBottomArc"];
+    } else if (variant == 2) {
+        CABasicAnimation *expand = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        expand.fromValue = @.45;
+        expand.toValue = @1.35;
+        expand.duration = duration;
+        expand.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        [glow addAnimation:expand forKey:@"galaxyBottomPulse"];
     }
 
     CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
