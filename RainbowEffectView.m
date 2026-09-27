@@ -507,7 +507,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     return pressed;
 }
 
-- (void)showGlassKeyEffectAtPoint:(CGPoint)point variant:(NSInteger)variant {
+- (void)showPressFeedbackAtPoint:(CGPoint)point variant:(NSInteger)variant {
     CGRect pressed = [self pressedKeyAtPoint:point];
     if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
     CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
@@ -518,63 +518,86 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
     CGFloat hue = mode == 1 ? [self number:@"Hue" fallback:.55 low:0 high:1] : self.hue;
     self.hue = fmod(self.hue + .07, 1);
-    UIColor *tint = [UIColor colorWithHue:hue saturation:[self neonSaturation:.42]
+    UIColor *tint = [UIColor colorWithHue:hue saturation:[self neonSaturation:.7]
                                   brightness:brightness alpha:alpha];
     UIBezierPath *path = RKKeyboardKeyFacePath(pressed);
     CALayer *effect = [CALayer layer];
-    effect.name = [NSString stringWithFormat:@"RKGlassKey%ld", (long)variant];
+    effect.name = [NSString stringWithFormat:@"RKPressFeedback%ld", (long)variant];
     effect.frame = self.bounds;
     [self.layer addSublayer:effect];
 
     CAShapeLayer *face = [CAShapeLayer layer];
     face.frame = self.bounds;
     face.path = path.CGPath;
-    face.fillColor = [tint colorWithAlphaComponent:.12].CGColor;
-    face.strokeColor = [UIColor colorWithWhite:1 alpha:.72].CGColor;
-    face.lineWidth = variant == 1 ? 1.0 : 1.5;
+    face.fillColor = variant == 0 ? [tint colorWithAlphaComponent:.34].CGColor :
+        [tint colorWithAlphaComponent:.08].CGColor;
+    face.strokeColor = variant == 1 ? [tint colorWithAlphaComponent:.95].CGColor :
+        [UIColor colorWithWhite:1 alpha:.38].CGColor;
+    face.lineWidth = variant == 1 ? 2.0 : 1.0;
     [effect addSublayer:face];
 
-    CAGradientLayer *reflection = [CAGradientLayer layer];
-    reflection.frame = CGRectInset(pressed, -pressed.size.width, -pressed.size.height);
-    reflection.startPoint = CGPointMake(0, 0);
-    reflection.endPoint = CGPointMake(1, 1);
-    CGColorRef clear = [UIColor colorWithWhite:1 alpha:0].CGColor;
-    CGColorRef shine = [UIColor colorWithWhite:1 alpha:variant == 2 ? .5 : .75].CGColor;
-    reflection.colors = @[(__bridge id)clear, (__bridge id)shine, (__bridge id)clear];
-    reflection.locations = @[@0, @(variant == 0 ? .42 : .58), @1];
-    CAShapeLayer *mask = [CAShapeLayer layer];
-    mask.frame = self.bounds;
-    mask.path = path.CGPath;
-    reflection.mask = mask;
-    [effect addSublayer:reflection];
+    CAGradientLayer *accent = nil;
+    if (variant == 2) {
+        accent = [CAGradientLayer layer];
+        accent.type = kCAGradientLayerRadial;
+        CGFloat radius = MAX(18, MAX(pressed.size.width, pressed.size.height) * 1.15);
+        CGPoint center = CGPointMake(CGRectGetMidX(pressed), CGRectGetMaxY(pressed));
+        accent.frame = CGRectMake(center.x - radius, center.y - radius, radius * 2, radius * 2);
+        accent.startPoint = CGPointMake(.5, .85);
+        accent.endPoint = CGPointMake(1, .5);
+        CGColorRef glow = [tint colorWithAlphaComponent:.72].CGColor;
+        CGColorRef clear = [tint colorWithAlphaComponent:0].CGColor;
+        accent.colors = @[(__bridge id)glow, (__bridge id)[tint colorWithAlphaComponent:.18].CGColor,
+            (__bridge id)clear];
+        accent.locations = @[@0, @.34, @1];
+        CAShapeLayer *mask = [CAShapeLayer layer];
+        mask.frame = self.bounds;
+        mask.path = path.CGPath;
+        accent.mask = mask;
+        [effect addSublayer:accent];
+    }
 
     CGFloat duration = [self number:@"Duration" fallback:.55 low:.15 high:1.2];
-    if (UIAccessibilityIsReduceMotionEnabled()) duration = .14;
+    if (UIAccessibilityIsReduceMotionEnabled()) duration = .12;
     CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-    fade.values = @[@0, @1, @.68, @0];
-    fade.keyTimes = @[@0, @.12, @.52, @1];
+    fade.values = @[@0, @1, @.72, @0];
+    fade.keyTimes = @[@0, @.08, @.5, @1];
     fade.duration = duration;
-    [effect addAnimation:fade forKey:@"glassKeyFade"];
-    if (!UIAccessibilityIsReduceMotionEnabled()) {
-        CABasicAnimation *travel = [CABasicAnimation animationWithKeyPath:@"transform.translation.x"];
-        travel.fromValue = @(-reflection.bounds.size.width);
-        travel.toValue = @(reflection.bounds.size.width);
-        travel.duration = duration;
-        travel.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut];
-        [reflection addAnimation:travel forKey:@"glassReflection"];
+    [effect addAnimation:fade forKey:@"pressFeedbackFade"];
+    if (variant == 0 && !UIAccessibilityIsReduceMotionEnabled()) {
+        CABasicAnimation *scale = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
+        scale.fromValue = @.96;
+        scale.toValue = @1.02;
+        scale.duration = duration * .65;
+        scale.autoreverses = YES;
+        scale.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        [face addAnimation:scale forKey:@"pressFaceScale"];
+    } else if (variant == 1) {
+        CABasicAnimation *stroke = [CABasicAnimation animationWithKeyPath:@"lineWidth"];
+        stroke.fromValue = @2.2;
+        stroke.toValue = @.8;
+        stroke.duration = duration;
+        [face addAnimation:stroke forKey:@"pressBorderRelax"];
+    } else if (accent && !UIAccessibilityIsReduceMotionEnabled()) {
+        CABasicAnimation *move = [CABasicAnimation animationWithKeyPath:@"transform.translation.y"];
+        move.fromValue = @(accent.bounds.size.height * .18);
+        move.toValue = @(-accent.bounds.size.height * .12);
+        move.duration = duration;
+        move.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
+        [accent addAnimation:move forKey:@"pressAccentLift"];
     }
 }
 
 - (void)showBreathingGlowAtPoint:(CGPoint)point {
-    [self showGlassKeyEffectAtPoint:point variant:0];
+    [self showPressFeedbackAtPoint:point variant:0];
 }
 
 - (void)showStarTrailAtPoint:(CGPoint)point {
-    [self showGlassKeyEffectAtPoint:point variant:1];
+    [self showPressFeedbackAtPoint:point variant:1];
 }
 
 - (void)showColorPulseAtPoint:(CGPoint)point {
-    [self showGlassKeyEffectAtPoint:point variant:2];
+    [self showPressFeedbackAtPoint:point variant:2];
 }
 
 // Native-only variant of WeType's spread. Keep showBedEffectAtPoint unchanged.
