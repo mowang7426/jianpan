@@ -41,9 +41,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 @property(nonatomic,strong) NSArray<NSValue *> *cachedCenters;
 @property(nonatomic,strong) NSArray<RKKeyWaveGeometry *> *cachedWaveGeometries;
 @property(nonatomic) CGRect cachedGeometryBounds;
-@property(nonatomic,strong) UIColor *bedColor;
-@property(nonatomic) NSInteger bedColorAttempts;
-@property(nonatomic) CGRect bedSampleBounds;
 @end
 @implementation RainbowEffectView
 - (instancetype)initWithFrame:(CGRect)frame {
@@ -137,7 +134,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     mask.frame = self.bounds;
     mask.path = self.cachedGutterPath.CGPath;
     mask.fillRule = kCAFillRuleEvenOdd;
-    mask.allowsEdgeAntialiasing = NO;
     return mask;
 }
 - (void)layoutSubviews {
@@ -145,11 +141,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if (!CGRectEqualToRect(self.cachedGeometryBounds, self.bounds)) {
         self.cachedGutterPath = nil;
         self.cachedGeometryBounds = CGRectNull;
-    }
-    if (!CGRectEqualToRect(self.bedSampleBounds, self.bounds)) {
-        self.bedColor = nil;
-        self.bedColorAttempts = 0;
-        self.bedSampleBounds = self.bounds;
     }
     // Old animations must not float over a new keyboard after rotation/resizing.
     for (CALayer *pulse in self.layer.sublayers.copy) {
@@ -164,8 +155,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if ([_keyFrames isEqualToArray:keyFrames]) return;
     _keyFrames = [keyFrames copy];
     self.underlightMaskImage = nil;
-    self.bedColor = nil;
-    self.bedColorAttempts = 0;
     NSMutableArray *faces = [NSMutableArray arrayWithCapacity:_keyFrames.count];
     NSMutableArray *centers = [NSMutableArray arrayWithCapacity:_keyFrames.count];
     NSMutableArray *geometries = [NSMutableArray arrayWithCapacity:_keyFrames.count * 2];
@@ -183,8 +172,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
             UIBezierPath *outline = [facePath copy];
             [outline applyTransform:CGAffineTransformMakeTranslation(-edgeFrame.origin.x, -edgeFrame.origin.y)];
             CGFloat corner = MIN(5, MIN(face.size.width, face.size.height) * .16);
-            UIBezierPath *outer = [UIBezierPath bezierPathWithRoundedRect:
-                CGRectMake(0, 0, edgeFrame.size.width, edgeFrame.size.height) cornerRadius:corner + rim];
+            UIBezierPath *outer = [UIBezierPath bezierPathWithRoundedRect:edgeFrame cornerRadius:corner + rim];
             [outer appendPath:outline];
             geometry.edgeFrame = edgeFrame;
             geometry.outline = outline;
@@ -293,7 +281,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     mask.frame = self.bounds;
     mask.path = path.CGPath;
     mask.fillRule = kCAFillRuleEvenOdd;
-    mask.allowsEdgeAntialiasing = NO;
     return mask;
 }
 
@@ -402,7 +389,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [[UIColor whiteColor] setFill];
         UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
         CGContextSetBlendMode(context,kCGBlendModeClear);
-        CGContextSetShouldAntialias(context, NO);
         BOOL nativeNine = [self usesNativeNineKeyBed];
         if (!nativeFaces) for (NSValue *value in self.keyFrames) {
             if (nativeNine) {
@@ -427,100 +413,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     mask.contentsScale = screenScale;
     mask.contents = (__bridge id)self.underlightMaskImage.CGImage;
     return mask;
-}
-- (UIColor *)keyboardBedColor {
-    if (self.bedColor) return self.bedColor;
-    if (self.bedColorAttempts >= 2) return nil;
-    UIView *host = self.superview;
-    NSArray<NSValue *> *frames = self.keyFrames;
-    if (!host.window || frames.count < 2 || CGRectIsEmpty(host.bounds)) return nil;
-    NSMutableArray<NSValue *> *points = [NSMutableArray array];
-    for (NSUInteger i = 0; i < frames.count && points.count < 6; i++) {
-        CGRect a = frames[i].CGRectValue;
-        for (NSUInteger j = i + 1; j < frames.count && points.count < 6; j++) {
-            CGRect b = frames[j].CGRectValue;
-            if (fabs(CGRectGetMidY(a) - CGRectGetMidY(b)) < 8) {
-                CGRect left = CGRectGetMinX(a) <= CGRectGetMinX(b) ? a : b;
-                CGRect right = CGRectGetMinX(a) <= CGRectGetMinX(b) ? b : a;
-                CGFloat gap = CGRectGetMinX(right) - CGRectGetMaxX(left);
-                if (gap >= 3 && gap < 36) {
-                    [points addObject:[NSValue valueWithCGPoint:CGPointMake(CGRectGetMaxX(left) + gap * .5, CGRectGetMidY(left))]];
-                }
-            } else if (fabs(CGRectGetMidX(a) - CGRectGetMidX(b)) < 8) {
-                CGRect top = CGRectGetMinY(a) <= CGRectGetMinY(b) ? a : b;
-                CGRect bottom = CGRectGetMinY(a) <= CGRectGetMinY(b) ? b : a;
-                CGFloat gap = CGRectGetMinY(bottom) - CGRectGetMaxY(top);
-                if (gap >= 3 && gap < 36) {
-                    [points addObject:[NSValue valueWithCGPoint:CGPointMake(CGRectGetMidX(top), CGRectGetMaxY(top) + gap * .5)]];
-                }
-            }
-        }
-    }
-    if (!points.count) {
-        self.bedColorAttempts = 2;
-        return nil;
-    }
-    BOOL hidden = self.hidden;
-    self.hidden = YES;
-    CGSize size = host.bounds.size;
-    UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
-    format.scale = 1;
-    format.opaque = NO;
-    UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:size format:format];
-    UIImage *image = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
-        [host drawViewHierarchyInRect:host.bounds afterScreenUpdates:NO];
-    }];
-    self.hidden = hidden;
-    self.bedColorAttempts += 1;
-    if (!image.CGImage) return nil;
-    CGColorSpaceRef space = CGColorSpaceCreateDeviceRGB();
-    NSMutableArray<UIColor *> *samples = [NSMutableArray array];
-    for (NSValue *value in points) {
-        CGPoint point = value.CGPointValue;
-        if (point.x < 0 || point.y < 0 || point.x >= size.width - 1 || point.y >= size.height - 1) continue;
-        UIGraphicsBeginImageContextWithOptions(CGSizeMake(1, 1), YES, 1);
-        [image drawAtPoint:CGPointMake(-floor(point.x), -floor(point.y))];
-        UIImage *dot = UIGraphicsGetImageFromCurrentImageContext();
-        UIGraphicsEndImageContext();
-        unsigned char pixel[4] = {0};
-        CGContextRef pixelContext = CGBitmapContextCreate(pixel, 1, 1, 8, 4, space,
-            kCGImageAlphaPremultipliedLast | kCGBitmapByteOrder32Big);
-        if (pixelContext && dot.CGImage) CGContextDrawImage(pixelContext, CGRectMake(0, 0, 1, 1), dot.CGImage);
-        if (pixelContext) CGContextRelease(pixelContext);
-        if (pixel[3] < 216) continue;
-        [samples addObject:[UIColor colorWithRed:pixel[0] / 255.0 green:pixel[1] / 255.0 blue:pixel[2] / 255.0 alpha:1]];
-    }
-    CGColorSpaceRelease(space);
-    if (!samples.count) return nil;
-    [samples sortUsingComparator:^NSComparisonResult(UIColor *lhs, UIColor *rhs) {
-        CGFloat lr = 0, lg = 0, lb = 0, rr = 0, rg = 0, rb = 0, alpha = 0;
-        [lhs getRed:&lr green:&lg blue:&lb alpha:&alpha];
-        [rhs getRed:&rr green:&rg blue:&rb alpha:&alpha];
-        CGFloat l = lr + lg + lb, r = rr + rg + rb;
-        return l < r ? NSOrderedAscending : (l > r ? NSOrderedDescending : NSOrderedSame);
-    }];
-    self.bedColor = samples[samples.count / 2];
-    self.bedSampleBounds = self.bounds;
-    return self.bedColor;
-}
-- (void)addKeycapShadowCoverToLayer:(CALayer *)layer origin:(CGPoint)origin reach:(CGFloat)reach duration:(CGFloat)duration {
-    UIColor *bed = [self keyboardBedColor];
-    if (!bed || reach <= 1) return;
-    CAGradientLayer *cover = [CAGradientLayer layer];
-    cover.name = @"bedShadowCover";
-    cover.type = kCAGradientLayerRadial;
-    cover.frame = CGRectMake(origin.x - reach, origin.y - reach, reach * 2, reach * 2);
-    cover.startPoint = CGPointMake(.5, .5);
-    cover.endPoint = CGPointMake(1, 1);
-    cover.colors = @[(id)bed.CGColor, (id)bed.CGColor, (id)[bed colorWithAlphaComponent:0].CGColor];
-    cover.locations = @[@0, @.9, @1];
-    cover.opacity = 0;
-    [layer addSublayer:cover];
-    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-    fade.values = @[@0, @1, @1, @0];
-    fade.keyTimes = @[@0, @.06, @.65, @1];
-    fade.duration = duration;
-    [cover addAnimation:fade forKey:@"bedShadowCoverFade"];
 }
 // Both effects live in the exposed keyboard bed. Neither outlines keycaps.
 - (void)showBedEffectAtPoint:(CGPoint)point style:(NSInteger)style {
@@ -561,18 +453,12 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     pulse.name = style == 0 ? @"RKBedRipples" : @"RKBedSpread";
     pulse.frame = self.bounds;
     pulse.bounds = self.bounds;
-    pulse.opacity = 1;
+    pulse.opacity = 0;
     pulse.mask = mask;
     [self.layer addSublayer:pulse];
-    [self addKeycapShadowCoverToLayer:pulse origin:origin reach:reach duration:duration];
-    CALayer *colors = [CALayer layer];
-    colors.frame = self.bounds;
-    colors.bounds = self.bounds;
-    colors.opacity = 0;
-    [pulse addSublayer:colors];
-    [self addNativeBedSpreadToPulse:colors origin:origin reach:reach color:color
+    [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
                           duration:duration reduce:reduce];
-    [self addNativeKeyWavesToPulse:colors origin:origin reach:reach color:color
+    [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
                          duration:duration reduce:reduce];
     CFTimeInterval now = [pulse convertTime:CACurrentMediaTime() fromLayer:nil];
     if (style == 0) {
@@ -596,7 +482,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
                 UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
                 UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-reach,origin.y-reach,reach*2,reach*2)];
                 ring.path = end.CGPath;
-                [colors addSublayer:ring];
+                [pulse addSublayer:ring];
                 CFTimeInterval begin = now + i*duration*.25;
                 if (!reduce) {
                     CABasicAnimation *expand = [CABasicAnimation animationWithKeyPath:@"path"];
@@ -625,7 +511,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
             (id)[color colorWithAlphaComponent:.75].CGColor,
             (id)color.CGColor, (id)[color colorWithAlphaComponent:0].CGColor];
         pool.locations = @[@0,@.4,@.72,@1];
-        [colors addSublayer:pool];
+        [pulse addSublayer:pool];
         if (!reduce) {
             CABasicAnimation *spread = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
             spread.fromValue = @.06; spread.toValue = @1;
@@ -639,7 +525,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     life.values = @[@0,@(peak),@(peak),@0];
     life.keyTimes = @[@0,@.06,@.65,@1];
     life.duration = duration;
-    [colors addAnimation:life forKey:@"bedEffectLifetime"];
+    [pulse addAnimation:life forKey:@"bedEffectLifetime"];
     // Transparent when finished; bounded pulses (three for ripples), no timer queue.
 }
 
@@ -688,14 +574,13 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     pulse.name = @"RKNativeWeTypeSpread";
     pulse.frame = self.bounds;
     pulse.bounds = self.bounds;
-    pulse.opacity = 1;
+    pulse.opacity = 0;
     [self.layer addSublayer:pulse];
     CALayer *bed = [CALayer layer];
     bed.frame = self.bounds;
     bed.bounds = self.bounds;
     bed.mask = mask;
     [pulse addSublayer:bed];
-    [self addKeycapShadowCoverToLayer:bed origin:origin reach:reach duration:duration];
     // This pool uses the same colors, stops, origin and animation as WeType.
     CAGradientLayer *pool = [CAGradientLayer layer];
     pool.type = kCAGradientLayerRadial;
@@ -727,8 +612,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     capPool.endPoint = pool.endPoint;
     capPool.colors = pool.colors;
     capPool.locations = pool.locations;
-    capPool.opacity = 0;
-    pool.opacity = 0;
     [cap addSublayer:capPool];
     if (!reduce) {
         CABasicAnimation *spread = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
@@ -743,8 +626,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     life.values = @[@0,@(peak),@(peak),@0];
     life.keyTimes = @[@0,@.06,@.65,@1];
     life.duration = duration;
-    [pool addAnimation:life forKey:@"bedEffectLifetime"];
-    [capPool addAnimation:life forKey:@"bedEffectLifetime"];
+    [pulse addAnimation:life forKey:@"bedEffectLifetime"];
     // Shared lifetime and eviction: no timers, snapshots or per-neighbor waves.
 }
 
@@ -789,7 +671,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [[UIColor whiteColor] setFill];
         UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
         CGContextSetBlendMode(context,kCGBlendModeClear);
-        CGContextSetShouldAntialias(context, NO);
         BOOL nativeNine = [self usesNativeNineKeyBed];
         if (!nativeFaces) for (NSValue *value in self.keyFrames) {
             if (nativeNine) {
@@ -822,7 +703,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     pulse.name = @"RKExpandingUnderlight";
     pulse.frame = self.bounds;
     pulse.bounds = self.bounds;
-    pulse.opacity = 1;
+    pulse.opacity = 0;
     CALayer *mask = [CALayer layer];
     mask.frame = self.bounds;
     mask.contentsScale = screenScale;
@@ -836,15 +717,9 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     if (fast) { reach = MIN(reach,145); duration = .38; }
     CGFloat initial = reduce ? 26 : 5;
     CGFloat finalRadius = reduce ? initial : reach;
-    [self addKeycapShadowCoverToLayer:pulse origin:origin reach:reach duration:duration];
-    CALayer *colors = [CALayer layer];
-    colors.frame = self.bounds;
-    colors.bounds = self.bounds;
-    colors.opacity = 0;
-    [pulse addSublayer:colors];
-    [self addNativeBedSpreadToPulse:colors origin:origin reach:reach color:color
+    [self addNativeBedSpreadToPulse:pulse origin:origin reach:reach color:color
                           duration:duration reduce:reduce];
-    [self addNativeKeyWavesToPulse:colors origin:origin reach:reach color:color
+    [self addNativeKeyWavesToPulse:pulse origin:origin reach:reach color:color
                          duration:duration reduce:reduce];
     UIBezierPath *start = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-initial,origin.y-initial,initial*2,initial*2)];
     UIBezierPath *end = [UIBezierPath bezierPathWithOvalInRect:CGRectMake(origin.x-finalRadius,origin.y-finalRadius,finalRadius*2,finalRadius*2)];
@@ -859,7 +734,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         ring.strokeColor = [color colorWithAlphaComponent:pass ? 1 : .28].CGColor;
         ring.lineWidth = pass ? 8 : 20;
         ring.path = end.CGPath;
-        [colors addSublayer:ring];
+        [pulse addSublayer:ring];
         if (!reduce) {
             CABasicAnimation *expand = [CABasicAnimation animationWithKeyPath:@"path"];
             expand.fromValue = (__bridge id)start.CGPath;
@@ -874,7 +749,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     fade.values = @[@0,@(peak),@(peak),@0];
     fade.keyTimes = @[@0,@.06,@.62,@1];
     fade.duration = duration;
-    [colors addAnimation:fade forKey:@"underlightLifetime"];
+    [pulse addAnimation:fade forKey:@"underlightLifetime"];
     // Transparent after expiration; the next press evicts old layers (max two).
 }
 
