@@ -507,115 +507,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     return pressed;
 }
 
-- (void)showGalaxyFeedbackAtPoint:(CGPoint)point variant:(NSInteger)variant {
-    CGRect pressed = [self pressedKeyAtPoint:point];
-    if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
-    CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
-    CGFloat brightness = [self number:@"Brightness" fallback:.95 low:0 high:1];
-    if (alpha <= 0 || brightness <= 0) return;
-    NSUInteger limit = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2 ? 1 : 2;
-    while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
-    NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
-    CGFloat hue = mode == 1 ? [self number:@"Hue" fallback:.55 low:0 high:1] : self.hue;
-    self.hue = fmod(self.hue + .07, 1);
-    UIColor *tint = [UIColor colorWithHue:hue saturation:[self neonSaturation:.82]
-                                  brightness:brightness alpha:alpha];
-    UIBezierPath *path = RKKeyboardKeyFacePath(pressed);
-    CALayer *effect = [CALayer layer];
-    effect.name = [NSString stringWithFormat:@"RKGalaxyFeedback%ld", (long)variant];
-    effect.frame = self.bounds;
-    [self.layer addSublayer:effect];
-
-    CAShapeLayer *face = [CAShapeLayer layer];
-    face.frame = self.bounds;
-    face.path = path.CGPath;
-    face.fillColor = UIColor.clearColor.CGColor;
-    face.strokeColor = [tint colorWithAlphaComponent:.16].CGColor;
-    face.lineWidth = 1.0;
-    [effect addSublayer:face];
-
-    CGFloat duration = [self number:@"Duration" fallback:.55 low:.15 high:1.2];
-    if (UIAccessibilityIsReduceMotionEnabled()) duration = .14;
-    CGFloat bottom = CGRectGetMaxY(pressed);
-    CGFloat centerX = CGRectGetMidX(pressed);
-    CGFloat reach = MAX(34, MIN(110, pressed.size.width * (variant == 1 ? 1.8 : 1.45)));
-    CGFloat height = MAX(28, MIN(96, pressed.size.height * (variant == 2 ? 2.2 : 1.65)));
-    CGPoint origin = CGPointMake(centerX, bottom + height * .12);
-    CAGradientLayer *glow = [CAGradientLayer layer];
-    glow.type = kCAGradientLayerRadial;
-    glow.frame = CGRectMake(origin.x - reach, bottom - height * .18, reach * 2, height);
-    glow.startPoint = CGPointMake(.5, .08);
-    glow.endPoint = CGPointMake(1, .72);
-    glow.colors = @[(__bridge id)[tint colorWithAlphaComponent:variant == 2 ? .98 : .86].CGColor,
-                    (__bridge id)[tint colorWithAlphaComponent:variant == 1 ? .7 : .52].CGColor,
-                    (__bridge id)[tint colorWithAlphaComponent:0].CGColor];
-    glow.locations = @[@0, @.28, @1];
-    [effect addSublayer:glow];
-
-    CAGradientLayer *underbar = [CAGradientLayer layer];
-    underbar.frame = CGRectMake(CGRectGetMinX(pressed) - pressed.size.width * .45,
-                                bottom - 1.5, pressed.size.width * 1.9, variant == 2 ? 5 : 3);
-    underbar.startPoint = CGPointMake(0, .5);
-    underbar.endPoint = CGPointMake(1, .5);
-    underbar.colors = @[(__bridge id)[tint colorWithAlphaComponent:0].CGColor,
-                        (__bridge id)[tint colorWithAlphaComponent:variant == 2 ? 1 : .9].CGColor,
-                        (__bridge id)[tint colorWithAlphaComponent:0].CGColor];
-    underbar.locations = @[@0, @.5, @1];
-    underbar.shadowColor = tint.CGColor;
-    underbar.shadowRadius = variant == 2 ? 14 : 9;
-    underbar.shadowOpacity = 1;
-    [effect addSublayer:underbar];
-
-    if (variant == 1) {
-        CAShapeLayer *arc = [CAShapeLayer layer];
-        arc.frame = self.bounds;
-        UIBezierPath *path = [UIBezierPath bezierPath];
-        [path moveToPoint:CGPointMake(CGRectGetMinX(pressed) - pressed.size.width * .35, bottom + height * .58)];
-        [path addCurveToPoint:CGPointMake(CGRectGetMaxX(pressed) + pressed.size.width * .35, bottom + height * .58)
-                 controlPoint1:CGPointMake(CGRectGetMinX(pressed) + pressed.size.width * .25, bottom + height * .05)
-                 controlPoint2:CGPointMake(CGRectGetMaxX(pressed) - pressed.size.width * .25, bottom + height * 1.05)];
-        arc.path = path.CGPath;
-        arc.fillColor = UIColor.clearColor.CGColor;
-        arc.strokeColor = [tint colorWithAlphaComponent:.95].CGColor;
-        arc.lineWidth = 2.4;
-        arc.lineCap = kCALineCapRound;
-        arc.shadowColor = tint.CGColor;
-        arc.shadowRadius = 8;
-        arc.shadowOpacity = 1;
-        [effect addSublayer:arc];
-        CABasicAnimation *travel = [CABasicAnimation animationWithKeyPath:@"strokeEnd"];
-        travel.fromValue = @0;
-        travel.toValue = @1;
-        travel.duration = duration;
-        [arc addAnimation:travel forKey:@"galaxyBottomArc"];
-    } else if (variant == 2) {
-        CABasicAnimation *expand = [CABasicAnimation animationWithKeyPath:@"transform.scale"];
-        expand.fromValue = @.45;
-        expand.toValue = @1.35;
-        expand.duration = duration;
-        expand.timingFunction = [CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut];
-        [glow addAnimation:expand forKey:@"galaxyBottomPulse"];
-    }
-
-    CAKeyframeAnimation *fade = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-    fade.values = @[@0, @1, @.72, @0];
-    fade.keyTimes = @[@0, @.12, @.6, @1];
-    fade.duration = duration;
-    [effect addAnimation:fade forKey:@"galaxyFeedbackFade"];
-}
-
-- (void)showBreathingGlowAtPoint:(CGPoint)point {
-    [self showGalaxyFeedbackAtPoint:point variant:0];
-}
-
-- (void)showStarTrailAtPoint:(CGPoint)point {
-    [self showGalaxyFeedbackAtPoint:point variant:1];
-}
-
-- (void)showColorPulseAtPoint:(CGPoint)point {
-    [self showGalaxyFeedbackAtPoint:point variant:2];
-}
-
 // Native-only variant of WeType's spread. Keep showBedEffectAtPoint unchanged.
 - (void)showNativeWeTypeSpreadAtPoint:(CGPoint)point {
     if (![self usesNativeKeycapGlow]) return;
@@ -841,7 +732,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         return;
     }
     if (!self.window || self.hidden) return;
-    NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:6];
+    NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:3];
     // Bed-only styles must not coexist with a captured keycap feedback layer.
     if (style == 0 || style == 1 || style >= 3) [self clearLegacyKeycapFeedback];
     // Keep the user's original configured style; adaptive mode only reduces work.
@@ -855,18 +746,6 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     }
     if (style == 3) {
         [self showCrispUnderlightAtPoint:point];
-        return;
-    }
-    if (style == 4) {
-        [self showStarTrailAtPoint:point];
-        return;
-    }
-    if (style == 5) {
-        [self showBreathingGlowAtPoint:point];
-        return;
-    }
-    if (style == 6) {
-        [self showColorPulseAtPoint:point];
         return;
     }
     if (style == 0 || style == 1) {
