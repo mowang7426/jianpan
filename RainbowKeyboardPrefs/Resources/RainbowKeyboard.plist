@@ -117,6 +117,60 @@
 		</dict>
 		<dict>
 			<key>cell</key>
+			<string>PSGroupCell</string>
+			<key>label</key>
+			<string>日夜间预设</string>
+			<key>footerText</key>
+			<string>开启后，手机会按当前外观自动换成对应光效。日间和夜间可以各自选择风格和颜色，例如日间轻弹彩虹、夜间扩散彩虹。关闭后仍使用上面的光效风格和光效颜色。</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSSwitchCell</string>
+			<key>key</key>
+			<string>AppearanceModes</string>
+			<key>label</key>
+			<string>日夜间自动切换</string>
+			<key>default</key>
+			<false/>
+			<key>defaults</key>
+			<string>com.minis.rainbowkeyboard</string>
+			<key>PostNotification</key>
+			<string>com.minis.rainbowkeyboard.changed</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>key</key>
+			<string>LightEffectStyle</string>
+			<key>action</key>
+			<string>chooseLightAppearance</string>
+			<key>label</key>
+			<string>日间光效</string>
+			<key>default</key>
+			<integer>2</integer>
+			<key>defaults</key>
+			<string>com.minis.rainbowkeyboard</string>
+			<key>PostNotification</key>
+			<string>com.minis.rainbowkeyboard.changed</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>key</key>
+			<string>DarkEffectStyle</string>
+			<key>action</key>
+			<string>chooseDarkAppearance</string>
+			<key>label</key>
+			<string>夜间光效</string>
+			<key>default</key>
+			<integer>1</integer>
+			<key>defaults</key>
+			<string>com.minis.rainbowkeyboard</string>
+			<key>PostNotification</key>
+			<string>com.minis.rainbowkeyboard.changed</string>
+		</dict>
+		<dict>
+			<key>cell</key>
 			<string>PSSliderCell</string>
 			<key>key</key>
 			<string>Opacity</string>

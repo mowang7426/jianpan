@@ -109,6 +109,47 @@ static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[R
                 words[2 + c] |= (uint64_t)llround(MIN(1, MAX(0, [pressColor[c] doubleValue])) * 65535) << 48;
         }
     }
+    id appearance = prefs[@"AppearanceModes"];
+    if ([appearance isKindOfClass:NSNumber.class]) {
+        NSInteger lightStyle = prefs[@"LightEffectStyle"] ? [prefs[@"LightEffectStyle"] integerValue] : 2;
+        NSInteger darkStyle = prefs[@"DarkEffectStyle"] ? [prefs[@"DarkEffectStyle"] integerValue] : 1;
+        NSInteger lightColor = prefs[@"LightColorMode"] ? [prefs[@"LightColorMode"] integerValue] : 0;
+        NSInteger darkColor = prefs[@"DarkColorMode"] ? [prefs[@"DarkColorMode"] integerValue] : 0;
+        NSInteger lightPress = prefs[@"LightPressColorMode"] ? [prefs[@"LightPressColorMode"] integerValue] : (lightColor == 1 ? 1 : 0);
+        NSInteger darkPress = prefs[@"DarkPressColorMode"] ? [prefs[@"DarkPressColorMode"] integerValue] : (darkColor == 1 ? 1 : 0);
+        uint64_t pack = 1;
+        if ([appearance boolValue]) pack |= 2;
+        pack |= (uint64_t)(lightStyle & 3) << 2;
+        pack |= (uint64_t)(darkStyle & 3) << 4;
+        pack |= (uint64_t)(lightColor & 3) << 6;
+        pack |= (uint64_t)(darkColor & 3) << 8;
+        pack |= (uint64_t)(lightPress & 1) << 10;
+        pack |= (uint64_t)(darkPress & 1) << 11;
+        if ([prefs[@"LightHue"] isKindOfClass:NSNumber.class] && isfinite([prefs[@"LightHue"] doubleValue])) {
+            pack |= UINT64_C(1) << 12;
+            pack |= (uint64_t)llround(MIN(1, MAX(0, [prefs[@"LightHue"] doubleValue])) * 255) << 16;
+        }
+        if ([prefs[@"DarkHue"] isKindOfClass:NSNumber.class] && isfinite([prefs[@"DarkHue"] doubleValue])) {
+            pack |= UINT64_C(1) << 13;
+            pack |= (uint64_t)llround(MIN(1, MAX(0, [prefs[@"DarkHue"] doubleValue])) * 255) << 24;
+        }
+        NSArray *sides = @[@"LightPressColor", @"DarkPressColor"];
+        for (NSUInteger side = 0; side < sides.count; side++) {
+            id rgb = prefs[sides[side]];
+            if (![rgb isKindOfClass:NSArray.class] || [rgb count] != 3) continue;
+            BOOL valid = YES;
+            uint64_t packed = 0;
+            for (NSUInteger c = 0; c < 3; c++) {
+                id component = rgb[c];
+                if (![component isKindOfClass:NSNumber.class] || !isfinite([component doubleValue])) { valid = NO; break; }
+                packed |= (uint64_t)llround(MIN(1, MAX(0, [component doubleValue])) * 255) << ((2 - c) * 8);
+            }
+            if (!valid) continue;
+            pack |= UINT64_C(1) << (14 + side);
+            words[5] |= packed << (16 + side * 24);
+        }
+        words[14] |= pack;
+    }
 }
 static inline uint64_t RKDisplayChecksum(const uint64_t words[RKDisplayWordCount]) {
     uint64_t hash = UINT64_C(14695981039346656037);
@@ -149,8 +190,28 @@ static inline NSDictionary *RKDecodeDisplaySnapshot(const uint64_t words[RKDispl
         if (theme > 13) return nil;
         result[@"Theme"] = @(theme);
     }
-    NSUInteger weChatTheme = words[5] <= 8 ? (NSUInteger)words[5] : (NSUInteger)((words[1] >> 54) & 3);
+    NSUInteger weChatTheme = (NSUInteger)(words[5] & 15);
+    if (weChatTheme > 8) weChatTheme = (NSUInteger)((words[1] >> 54) & 3);
     result[@"WeChatTheme"] = @(weChatTheme);
+    if (words[14] & 1) {
+        result[@"AppearanceModes"] = @((words[14] & 2) != 0);
+        result[@"LightEffectStyle"] = @((words[14] >> 2) & 3);
+        result[@"DarkEffectStyle"] = @((words[14] >> 4) & 3);
+        result[@"LightColorMode"] = @((words[14] >> 6) & 3);
+        result[@"DarkColorMode"] = @((words[14] >> 8) & 3);
+        result[@"LightPressColorMode"] = @((words[14] >> 10) & 1);
+        result[@"DarkPressColorMode"] = @((words[14] >> 11) & 1);
+        if (words[14] & (UINT64_C(1) << 12)) result[@"LightHue"] = @(((words[14] >> 16) & 255) / 255.0);
+        if (words[14] & (UINT64_C(1) << 13)) result[@"DarkHue"] = @(((words[14] >> 24) & 255) / 255.0);
+        if (words[14] & (UINT64_C(1) << 14)) {
+            uint64_t rgb = (words[5] >> 16) & 0xFFFFFF;
+            result[@"LightPressColor"] = @[@(((rgb >> 16) & 255) / 255.0), @(((rgb >> 8) & 255) / 255.0), @((rgb & 255) / 255.0)];
+        }
+        if (words[14] & (UINT64_C(1) << 15)) {
+            uint64_t rgb = (words[5] >> 40) & 0xFFFFFF;
+            result[@"DarkPressColor"] = @[@(((rgb >> 16) & 255) / 255.0), @(((rgb >> 8) & 255) / 255.0), @((rgb & 255) / 255.0)];
+        }
+    }
     if (words[1] & (UINT64_C(1) << 41)) result[@"PressColorMode"] = @((words[1] >> 42) & 1);
     if (words[1] & (UINT64_C(1) << 43)) {
         uint32_t bits = (uint32_t)(words[14] >> 32);

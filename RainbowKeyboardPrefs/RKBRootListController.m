@@ -108,10 +108,24 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 
 @interface RKBRootListController : PSListController <UIColorPickerViewControllerDelegate>
 @property(nonatomic, copy) NSString *editingColorKey;
+@property(nonatomic) NSInteger appearanceStyle;
 @end
 
 @interface RKBCandidateListController : RKBRootListController
 @end
+
+static NSString *RKAppearancePresetTitle(NSDictionary *prefs, BOOL dark) {
+    NSString *side = dark ? @"Dark" : @"Light";
+    id styleValue = prefs[[side stringByAppendingString:@"EffectStyle"]];
+    id colorValue = prefs[[side stringByAppendingString:@"ColorMode"]];
+    NSInteger style = styleValue ? [styleValue integerValue] : (dark ? 1 : 2);
+    NSInteger color = colorValue ? [colorValue integerValue] : 0;
+    NSArray *styles = @[@"波纹", @"扩散", @"轻弹", @"流光底韵"];
+    NSArray *colors = @[@"彩虹", @"固定颜色", @"横向渐变"];
+    if (style < 0 || style >= (NSInteger)styles.count) style = 0;
+    if (color < 0 || color >= (NSInteger)colors.count) color = 0;
+    return [NSString stringWithFormat:@"%@ · %@", styles[style], colors[color]];
+}
 
 @implementation RKBRootListController
 
@@ -143,6 +157,14 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
 
     if ([key isEqualToString:@"PerformanceMode"]) {
         RKApplyPerformancePreset(values, number);
+    } else if ([key isEqualToString:@"AppearanceModes"]) {
+        values[key] = @([value boolValue]);
+        if (!values[@"LightEffectStyle"]) values[@"LightEffectStyle"] = @2;
+        if (!values[@"LightColorMode"]) values[@"LightColorMode"] = @0;
+        if (!values[@"LightPressColorMode"]) values[@"LightPressColorMode"] = @0;
+        if (!values[@"DarkEffectStyle"]) values[@"DarkEffectStyle"] = @1;
+        if (!values[@"DarkColorMode"]) values[@"DarkColorMode"] = @0;
+        if (!values[@"DarkPressColorMode"]) values[@"DarkPressColorMode"] = @0;
     } else if ([key isEqualToString:@"EffectStyle"] || [key isEqualToString:@"ColorMode"]) {
         values[key] = value;
         values[@"Theme"] = @0;
@@ -201,6 +223,68 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
     [self chooseSimpleOptionForKey:@"CandidateGradientMode" title:@"候选栏渐变" options:@[@"关闭", @"静态渐变", @"流动渐变", @"呼吸渐变", @"彩虹渐变", @"跟随输入"] values:@[@0,@1,@2,@3,@4,@5]];
 }
 
+- (void)saveAppearanceDark:(BOOL)dark style:(NSInteger)style colorMode:(NSInteger)colorMode {
+    NSString *side = dark ? @"Dark" : @"Light";
+    NSMutableDictionary *values = [RKReadPreferences() mutableCopy] ?: [NSMutableDictionary dictionary];
+    values[[side stringByAppendingString:@"EffectStyle"]] = @(style);
+    values[[side stringByAppendingString:@"ColorMode"]] = @(colorMode);
+    values[[side stringByAppendingString:@"PressColorMode"]] = @(colorMode == 1 ? 1 : 0);
+    RKSaveAndNotify(values);
+    [self reloadSpecifiers];
+}
+
+- (void)chooseAppearanceDark:(BOOL)dark {
+    NSString *side = dark ? @"Dark" : @"Light";
+    NSDictionary *prefs = RKReadPreferences();
+    NSInteger currentStyle = prefs[[side stringByAppendingString:@"EffectStyle"]] ? [prefs[[side stringByAppendingString:@"EffectStyle"]] integerValue] : (dark ? 1 : 2);
+    NSInteger currentColor = prefs[[side stringByAppendingString:@"ColorMode"]] ? [prefs[[side stringByAppendingString:@"ColorMode"]] integerValue] : 0;
+    NSArray *styles = @[@"波纹", @"扩散", @"轻弹", @"流光底韵"];
+    NSArray *colors = @[@"彩虹", @"固定颜色", @"横向渐变"];
+    UIAlertController *styleAlert = [UIAlertController alertControllerWithTitle:dark ? @"夜间光效" : @"日间光效"
+                                                                        message:@"先选风格，再选颜色。固定颜色会接着打开选色器。"
+                                                                 preferredStyle:UIAlertControllerStyleActionSheet];
+    for (NSInteger style = 0; style < (NSInteger)styles.count; style++) {
+        NSString *title = style == currentStyle ? [NSString stringWithFormat:@"✓ %@", styles[style]] : styles[style];
+        [styleAlert addAction:[UIAlertAction actionWithTitle:title style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *action) {
+            UIAlertController *colorAlert = [UIAlertController alertControllerWithTitle:styles[style]
+                                                                                 message:@"选择这一侧的光效颜色"
+                                                                          preferredStyle:UIAlertControllerStyleActionSheet];
+            for (NSInteger color = 0; color < (NSInteger)colors.count; color++) {
+                NSString *colorTitle = color == currentColor && style == currentStyle ? [NSString stringWithFormat:@"✓ %@", colors[color]] : colors[color];
+                [colorAlert addAction:[UIAlertAction actionWithTitle:colorTitle style:UIAlertActionStyleDefault handler:^(__unused UIAlertAction *colorAction) {
+                    if (color == 1) {
+                        self.appearanceStyle = style;
+                        self.editingColorKey = dark ? @"DarkPressColor" : @"LightPressColor";
+                        [self saveAppearanceDark:dark style:style colorMode:1];
+                        UIColorPickerViewController *picker = [UIColorPickerViewController new];
+                        picker.delegate = self;
+                        picker.supportsAlpha = NO;
+                        picker.title = dark ? @"夜间固定颜色" : @"日间固定颜色";
+                        id rgb = RKReadPreferences()[self.editingColorKey];
+                        if ([rgb isKindOfClass:NSArray.class] && [rgb count] == 3) {
+                            picker.selectedColor = [UIColor colorWithRed:[rgb[0] doubleValue] green:[rgb[1] doubleValue] blue:[rgb[2] doubleValue] alpha:1];
+                        }
+                        dispatch_async(dispatch_get_main_queue(), ^{
+                            [self presentViewController:picker animated:YES completion:nil];
+                        });
+                        return;
+                    }
+                    [self saveAppearanceDark:dark style:style colorMode:color];
+                }]];
+            }
+            [colorAlert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+            dispatch_async(dispatch_get_main_queue(), ^{
+                [self presentViewController:colorAlert animated:YES completion:nil];
+            });
+        }]];
+    }
+    [styleAlert addAction:[UIAlertAction actionWithTitle:@"取消" style:UIAlertActionStyleCancel handler:nil]];
+    [self presentViewController:styleAlert animated:YES completion:nil];
+}
+
+- (void)chooseLightAppearance { [self chooseAppearanceDark:NO]; }
+- (void)chooseDarkAppearance { [self chooseAppearanceDark:YES]; }
+
 - (void)chooseEffectStyle {
         [self chooseSimpleOptionForKey:@"EffectStyle"
                              title:@"光效风格"
@@ -252,6 +336,8 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
         NSArray *titles = @[@"关闭", @"静态渐变", @"流动渐变", @"呼吸渐变", @"彩虹渐变", @"跟随输入"];
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"静态渐变";
+    } else if ([key isEqualToString:@"LightEffectStyle"] || [key isEqualToString:@"DarkEffectStyle"]) {
+        cell.detailTextLabel.text = RKAppearancePresetTitle(RKReadPreferences(), [key isEqualToString:@"DarkEffectStyle"]);
     } else if ([key isEqualToString:@"EffectStyle"]) {
         NSArray *titles = @[@"波纹", @"扩散", @"轻弹", @"流光底韵"];
         NSInteger value = [RKReadPreferences()[key] integerValue];
@@ -299,10 +385,22 @@ static void RKApplyPerformancePreset(NSMutableDictionary *values, NSInteger mode
     if (!color || !self.editingColorKey.length) return;
     CGFloat r = 0, g = 0, b = 0, a = 1;
     if (![color getRed:&r green:&g blue:&b alpha:&a]) return;
-
     NSMutableDictionary *values = [RKReadPreferences() mutableCopy] ?: [NSMutableDictionary dictionary];
-    values[self.editingColorKey] = @[@(r), @(g), @(b)];
-    values[@"Preset"] = @(-1);
+    BOOL appearance = [self.editingColorKey isEqualToString:@"LightPressColor"] || [self.editingColorKey isEqualToString:@"DarkPressColor"];
+    if (appearance) {
+        BOOL dark = [self.editingColorKey hasPrefix:@"Dark"];
+        NSString *side = dark ? @"Dark" : @"Light";
+        CGFloat hue = 0, saturation = 0, brightness = 0;
+        if (![color getHue:&hue saturation:&saturation brightness:&brightness alpha:&a]) hue = 0;
+        values[[side stringByAppendingString:@"EffectStyle"]] = @(self.appearanceStyle);
+        values[[side stringByAppendingString:@"ColorMode"]] = @1;
+        values[[side stringByAppendingString:@"PressColorMode"]] = @1;
+        values[[side stringByAppendingString:@"Hue"]] = @(hue);
+        values[[side stringByAppendingString:@"PressColor"]] = @[@(r), @(g), @(b)];
+    } else {
+        values[self.editingColorKey] = @[@(r), @(g), @(b)];
+        values[@"Preset"] = @(-1);
+    }
     RKSaveAndNotify(values);
 }
 
