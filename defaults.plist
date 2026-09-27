@@ -34,6 +34,7 @@
     BackgroundStrength = 0.18;
     NativeKeyboard = 1;
     WeChatKeyboard = 1;
+    NativeTheme = 0;
     CandidateGradient = 1;
     CandidateNative = 1;
     CandidateWeType = 1;

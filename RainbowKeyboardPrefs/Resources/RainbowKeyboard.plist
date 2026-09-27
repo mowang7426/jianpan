@@ -44,6 +44,8 @@
 			<string>PSGroupCell</string>
 			<key>label</key>
 			<string>主题</string>
+			<key>footerText</key>
+			<string>原生键帽主题作用于系统键盘，微信键帽主题作用于微信输入法。夜间外观会换成同一套主题的深色配色。</string>
 		</dict>
 		<dict>
 			<key>cell</key>
@@ -70,6 +72,22 @@
 			<string>chooseWeChatTheme</string>
 			<key>label</key>
 			<string>微信键帽主题</string>
+			<key>default</key>
+			<integer>0</integer>
+			<key>defaults</key>
+			<string>com.minis.rainbowkeyboard</string>
+			<key>PostNotification</key>
+			<string>com.minis.rainbowkeyboard.changed</string>
+		</dict>
+		<dict>
+			<key>cell</key>
+			<string>PSLinkCell</string>
+			<key>key</key>
+			<string>NativeTheme</string>
+			<key>action</key>
+			<string>chooseNativeTheme</string>
+			<key>label</key>
+			<string>原生键帽主题</string>
 			<key>default</key>
 			<integer>0</integer>
 			<key>defaults</key>

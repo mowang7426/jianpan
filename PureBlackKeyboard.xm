@@ -642,22 +642,27 @@ static void RKUpdateBlackLabel(UILabel *label, BOOL enabled) {
     NSAttributedString *current = label.attributedText;
     BOOL isWhiteText = current && [current isEqualToAttributedString:texts[@"white"]];
     NSDictionary *colors = objc_getAssociatedObject(label, &RKBlackLabelColorKey);
+    UIColor *themeText = RKKeycapTextColor();
     if (enabled) {
-        if (![label.textColor isEqual:colors[@"black"]]) {
+        if (![colors[@"black"] isEqual:themeText]) {
+            UIColor *source = colors[@"source"] ?: label.textColor ?: UIColor.blackColor;
             objc_setAssociatedObject(label, &RKBlackLabelColorKey,
-                @{@"source":label.textColor ?: UIColor.blackColor, @"black":RKKeycapTextColor()},
+                @{@"source":source, @"black":themeText},
                 OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-            label.textColor = RKKeycapTextColor();
         }
+        if (![label.textColor isEqual:themeText]) label.textColor = themeText;
     } else {
         if ([label.textColor isEqual:colors[@"black"]]) label.textColor = colors[@"source"];
         objc_setAssociatedObject(label, &RKBlackLabelColorKey, nil, OBJC_ASSOCIATION_RETAIN_NONATOMIC);
     }
-    if (enabled && current && !isWhiteText) {
-        NSMutableAttributedString *white = [current mutableCopy];
-        [white addAttribute:NSForegroundColorAttributeName value:RKKeycapTextColor()
+    BOOL themeTextChanged = enabled && [texts[@"white"] length] > 0 &&
+        ![[texts[@"white"] attribute:NSForegroundColorAttributeName atIndex:0 effectiveRange:NULL] isEqual:themeText];
+    if (enabled && current && (!isWhiteText || themeTextChanged)) {
+        NSAttributedString *source = themeTextChanged && texts[@"source"] ? texts[@"source"] : current;
+        NSMutableAttributedString *white = [source mutableCopy];
+        [white addAttribute:NSForegroundColorAttributeName value:themeText
             range:NSMakeRange(0, white.length)];
-        objc_setAssociatedObject(label, &RKBlackLabelTextKey, @{@"source":current, @"white":white},
+        objc_setAssociatedObject(label, &RKBlackLabelTextKey, @{@"source":source, @"white":white},
             OBJC_ASSOCIATION_RETAIN_NONATOMIC);
         label.attributedText = white;
     } else if (!enabled) {

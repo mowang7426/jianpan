@@ -1635,6 +1635,13 @@ static UIImage *RKDrawViewFixture(UIView *view) {
         fabs([pressSnapshot[@"KeycapColor"][1] doubleValue] - .6) < .00002 &&
         ![pressSnapshot[@"CandidateGradient"] boolValue]
         name:@"press color extension preserves old v2 palette flag and preset fields without overlap"];
+    display[@"WeChatTheme"] = @8;
+    display[@"NativeTheme"] = @6;
+    RKEncodeDisplaySnapshot(display, words);
+    NSDictionary *themeSnapshot = RKDecodeDisplaySnapshot(words, RKDisplayChecksum(words));
+    [self check:[themeSnapshot[@"WeChatTheme"] integerValue] == 8 &&
+        [themeSnapshot[@"NativeTheme"] integerValue] == 6
+        name:@"native keycap theme rides spare snapshot bits without colliding with WeChat theme"];
     NSDictionary *legacyMerge = RKMergeDisplaySnapshot(pressSnapshot,
         @{@"RKSettingsRevision":@1235, @"CandidateGradient":@NO});
     [self check:legacyMerge[@"PressBrightness"] == nil && legacyMerge[@"PressColor"] == nil &&

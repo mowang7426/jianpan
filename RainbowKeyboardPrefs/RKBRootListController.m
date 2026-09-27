@@ -127,6 +127,10 @@ static NSString *RKAppearancePresetTitle(NSDictionary *prefs, BOOL dark) {
     return [NSString stringWithFormat:@"%@ · %@", styles[style], colors[color]];
 }
 
+static NSArray<NSString *> *RKKeycapThemeTitles(void) {
+    return @[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚", @"黑曜深海", @"奶油珊瑚", @"黑白红", @"森林翡翠", @"哆啦A梦"];
+}
+
 @implementation RKBRootListController
 
 - (NSMutableArray *)specifiers {
@@ -216,7 +220,12 @@ static NSString *RKAppearancePresetTitle(NSDictionary *prefs, BOOL dark) {
 }
 - (void)chooseWeChatTheme {
     [self chooseSimpleOptionForKey:@"WeChatTheme" title:@"微信键帽主题"
-                           options:@[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚", @"黑曜深海", @"奶油珊瑚", @"黑白红", @"森林翡翠", @"哆啦A梦"]
+                           options:RKKeycapThemeTitles()
+                             values:@[@0, @1, @2, @3, @4, @5, @6, @7, @8]];
+}
+- (void)chooseNativeTheme {
+    [self chooseSimpleOptionForKey:@"NativeTheme" title:@"原生键帽主题"
+                           options:RKKeycapThemeTitles()
                              values:@[@0, @1, @2, @3, @4, @5, @6, @7, @8]];
 }
 - (void)chooseCandidateGradientMode {
@@ -328,8 +337,8 @@ static NSString *RKAppearancePresetTitle(NSDictionary *prefs, BOOL dark) {
         NSArray *titles = @[@"自定义", @"深空", @"极夜紫", @"赛博蓝", @"赤焰", @"极光", @"Rainbow", @"冰晶", @"Neon", @"Cyberpunk", @"微信·墨夜", @"微信·深海", @"微信·樱粉", @"微信·极简"];
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"自定义";
-    } else if ([key isEqualToString:@"WeChatTheme"]) {
-        NSArray *titles = @[@"关闭", @"天空主题", @"薄荷清风", @"日落珊瑚", @"黑曜深海", @"奶油珊瑚", @"黑白红", @"森林翡翠", @"哆啦A梦"];
+    } else if ([key isEqualToString:@"WeChatTheme"] || [key isEqualToString:@"NativeTheme"]) {
+        NSArray *titles = RKKeycapThemeTitles();
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"关闭";
     } else if ([key isEqualToString:@"CandidateGradientMode"]) {
