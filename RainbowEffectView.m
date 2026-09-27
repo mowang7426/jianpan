@@ -540,7 +540,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     reflection.endPoint = CGPointMake(1, 1);
     CGColorRef clear = [UIColor colorWithWhite:1 alpha:0].CGColor;
     CGColorRef shine = [UIColor colorWithWhite:1 alpha:variant == 2 ? .5 : .75].CGColor;
-    reflection.colors = @[(id)clear, (id)shine, (id)clear];
+    reflection.colors = @[(__bridge id)clear, (__bridge id)shine, (__bridge id)clear];
     reflection.locations = @[@0, @(variant == 0 ? .42 : .58), @1];
     CAShapeLayer *mask = [CAShapeLayer layer];
     mask.frame = self.bounds;
