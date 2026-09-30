@@ -119,9 +119,6 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
                 effect.keyFrames = liveKeyFrames;
                 objc_setAssociatedObject(liveHost, &RKOverlayBoundsKey,
                     [NSValue valueWithCGRect:liveHost.bounds], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
-                // A layout/plane switch is not a key press. Do not render the
-                // queued touch using coordinates from the previous keyboard.
-                return;
             }
             CGPoint effectPoint = [liveHost convertPoint:touchPoint toView:effect];
             if (CACurrentMediaTime() - pending.time > .080) return;
