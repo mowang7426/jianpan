@@ -389,18 +389,13 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [[UIColor whiteColor] setFill];
         UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
         CGContextSetBlendMode(context,kCGBlendModeClear);
-        BOOL nativeNine = [self usesNativeNineKeyBed];
+        // Cut out the actual rounded key-face shape, not the rectangular
+        // hit-test frame. Rectangular cutouts leak square-edged shadows around
+        // every cap when the under-key light spreads.
         if (!nativeFaces) for (NSValue *value in self.keyFrames) {
-            if (nativeNine) {
-                // Native hit cells can tile the whole bed, including gutters.
-                // Use the project's inset key-face model (2pt vertical,
-                // up to 2.5pt horizontal), keeping the central face opaque.
-                UIBezierPath *face = RKKeyboardKeyFacePath(value.CGRectValue);
-                CGContextAddPath(context,face.CGPath);
-                CGContextFillPath(context);
-            } else {
-                CGContextFillRect(context,value.CGRectValue);
-            }
+            UIBezierPath *face = RKKeyboardKeyFacePath(value.CGRectValue);
+            CGContextAddPath(context,face.CGPath);
+            CGContextFillPath(context);
         }
         self.underlightMaskImage = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
@@ -671,18 +666,13 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
         [[UIColor whiteColor] setFill];
         UIRectFill(CGRectIntersection(CGRectInset(bed,-3,-4),self.bounds));
         CGContextSetBlendMode(context,kCGBlendModeClear);
-        BOOL nativeNine = [self usesNativeNineKeyBed];
+        // Cut out the actual rounded key-face shape, not the rectangular
+        // hit-test frame. Rectangular cutouts leak square-edged shadows around
+        // every cap when the under-key light spreads.
         if (!nativeFaces) for (NSValue *value in self.keyFrames) {
-            if (nativeNine) {
-                // Native hit cells can tile the whole bed, including gutters.
-                // Use the project's inset key-face model (2pt vertical,
-                // up to 2.5pt horizontal), keeping the central face opaque.
-                UIBezierPath *face = RKKeyboardKeyFacePath(value.CGRectValue);
-                CGContextAddPath(context,face.CGPath);
-                CGContextFillPath(context);
-            } else {
-                CGContextFillRect(context,value.CGRectValue);
-            }
+            UIBezierPath *face = RKKeyboardKeyFacePath(value.CGRectValue);
+            CGContextAddPath(context,face.CGPath);
+            CGContextFillPath(context);
         }
         self.underlightMaskImage = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
