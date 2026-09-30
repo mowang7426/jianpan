@@ -100,6 +100,11 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
             BOOL keyGeometryChanged = ![effect.keyFrames isEqualToArray:liveKeyFrames];
             if (geometryChanged || layoutChanged || keyGeometryChanged) {
                 RKClearEffectLayers(effect);
+                // A symbol/plane switch can keep the same CGRect list while
+                // changing the meaning of those cells. Force all cached masks
+                // and paths to be rebuilt instead of reusing old-plane pixels.
+                effect.layer.mask = nil;
+                effect.keyFrames = nil;
                 effect.frame = liveHost.bounds;
                 [liveHost bringSubviewToFront:effect];
                 {
