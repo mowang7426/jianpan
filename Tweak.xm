@@ -98,7 +98,7 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
             NSArray<NSValue *> *liveKeyFrames = scan ? RKKeyboardKeyFrames(liveHost) : effect.keyFrames;
             if (scan) objc_setAssociatedObject(liveHost, &RKGeometryTimeKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             BOOL keyGeometryChanged = ![effect.keyFrames isEqualToArray:liveKeyFrames];
-            if (geometryChanged || keyGeometryChanged) {
+            if (geometryChanged || layoutChanged || keyGeometryChanged) {
                 RKClearEffectLayers(effect);
                 effect.frame = liveHost.bounds;
                 [liveHost bringSubviewToFront:effect];
