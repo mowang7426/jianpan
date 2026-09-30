@@ -98,7 +98,8 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
             NSArray<NSValue *> *liveKeyFrames = scan ? RKKeyboardKeyFrames(liveHost) : effect.keyFrames;
             if (scan) objc_setAssociatedObject(liveHost, &RKGeometryTimeKey, @(now), OBJC_ASSOCIATION_RETAIN_NONATOMIC);
             BOOL keyGeometryChanged = ![effect.keyFrames isEqualToArray:liveKeyFrames];
-            if (geometryChanged || layoutChanged || keyGeometryChanged) {
+            BOOL layoutWasRebuilt = geometryChanged || layoutChanged || keyGeometryChanged;
+            if (layoutWasRebuilt) {
                 RKClearEffectLayers(effect);
                 // A symbol/plane switch can keep the same CGRect list while
                 // changing the meaning of those cells. Force all cached masks
@@ -119,6 +120,23 @@ static void RKCollectExclusions(UIView *node, UIView *host, UIBezierPath *path, 
                 effect.keyFrames = liveKeyFrames;
                 objc_setAssociatedObject(liveHost, &RKOverlayBoundsKey,
                     [NSValue valueWithCGRect:liveHost.bounds], OBJC_ASSOCIATION_RETAIN_NONATOMIC);
+            }
+            if (layoutWasRebuilt) {
+                // Let UIKit finish installing the new keyplane before drawing
+                // the switch key. This preserves its feedback without painting
+                // a pulse with the outgoing plane's coordinates.
+                __weak RainbowEffectView *weakEffect = effect;
+                __weak UIView *weakLiveHost = liveHost;
+                CGPoint queuedPoint = touchPoint;
+                UIView *queuedSource = sourceView;
+                dispatch_async(dispatch_get_main_queue(), ^{
+                    RainbowEffectView *freshEffect = weakEffect;
+                    UIView *freshHost = weakLiveHost;
+                    if (!freshEffect || !freshHost || !freshHost.window || freshEffect.hidden) return;
+                    CGPoint freshPoint = [freshHost convertPoint:queuedPoint toView:freshEffect];
+                    [freshEffect showRippleAtPoint:freshPoint sourceView:queuedSource];
+                });
+                return;
             }
             CGPoint effectPoint = [liveHost convertPoint:touchPoint toView:effect];
             if (CACurrentMediaTime() - pending.time > .080) return;
