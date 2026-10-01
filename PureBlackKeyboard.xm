@@ -2043,11 +2043,6 @@ static void RKWriteBlackDiagnostic(void) {
 
 %ctor {
     @autoreleasepool {
-        // Stability test build: keep RainbowEffectView/candidate effects active,
-        // but do not install PureBlackKeyboard's global UIKit/CALayer hooks.
-        // Those hooks recursively process system keyboard layers and are the
-        // highest-risk path on iOS 17.3.x.
-        return;
         RKBlackViews = [NSHashTable weakObjectsHashTable];
         RKBlackImageLayers = [NSHashTable weakObjectsHashTable];
         RKBlackWeTypeHosts = [NSHashTable weakObjectsHashTable];
