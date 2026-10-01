@@ -483,7 +483,9 @@ static void RKWriteNativeDiagnostic(void) {
 %hook NSString
 - (void)drawInRect:(CGRect)rect withAttributes:(NSDictionary *)attributes {
     if (RKCandidatePreserveDrawing(self, attributes)) {
-        RKDrawCandidateOriginal(^{ %orig; });
+        RKDrawCandidateOriginal(^{
+            %orig;
+        });
         return;
     }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
@@ -497,7 +499,9 @@ static void RKWriteNativeDiagnostic(void) {
 }
 - (void)drawAtPoint:(CGPoint)point withAttributes:(NSDictionary *)attributes {
     if (RKCandidatePreserveDrawing(self, attributes)) {
-        RKDrawCandidateOriginal(^{ %orig; });
+        RKDrawCandidateOriginal(^{
+            %orig;
+        });
         return;
     }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
@@ -510,7 +514,9 @@ static void RKWriteNativeDiagnostic(void) {
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options attributes:(NSDictionary *)attributes context:(NSStringDrawingContext *)context {
     if (RKCandidatePreserveDrawing(self, attributes)) {
-        RKDrawCandidateOriginal(^{ %orig; });
+        RKDrawCandidateOriginal(^{
+            %orig;
+        });
         return;
     }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
@@ -526,7 +532,9 @@ static void RKWriteNativeDiagnostic(void) {
 %hook NSAttributedString
 - (void)drawInRect:(CGRect)rect {
     if (RKCandidatePreserveDrawing(self, nil)) {
-        RKDrawCandidateOriginal(^{ %orig; });
+        RKDrawCandidateOriginal(^{
+            %orig;
+        });
         return;
     }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
@@ -540,7 +548,9 @@ static void RKWriteNativeDiagnostic(void) {
 }
 - (void)drawAtPoint:(CGPoint)point {
     if (RKCandidatePreserveDrawing(self, nil)) {
-        RKDrawCandidateOriginal(^{ %orig; });
+        RKDrawCandidateOriginal(^{
+            %orig;
+        });
         return;
     }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
@@ -553,7 +563,9 @@ static void RKWriteNativeDiagnostic(void) {
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options context:(NSStringDrawingContext *)context {
     if (RKCandidatePreserveDrawing(self, nil)) {
-        RKDrawCandidateOriginal(^{ %orig; });
+        RKDrawCandidateOriginal(^{
+            %orig;
+        });
         return;
     }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
