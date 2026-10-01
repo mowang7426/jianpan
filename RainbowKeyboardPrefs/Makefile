@@ -6,9 +6,10 @@ RainbowKeyboardPrefs_RESOURCE_FILES := Resources/RainbowKeyboard.plist
 RainbowKeyboardPrefs_FRAMEWORKS := UIKit
 RainbowKeyboardPrefs_INSTALL_PATH := /Library/PreferenceBundles
 RainbowKeyboardPrefs_CFLAGS := -fobjc-arc -Wno-deprecated-declarations
-# Preferences.framework is private and is not shipped by the GitHub SDK used by CI.
-# The Settings app provides PSListController/PSSpecifier at runtime.
-RainbowKeyboardPrefs_LDFLAGS := -undefined dynamic_lookup
+# The checked-out Theos iPhoneOS16.5 SDK includes Preferences.tbd.
+# Bind PSListController/PSSpecifier to that framework instead of relying on
+# flat-namespace lookup and whichever images Settings happened to load first.
+RainbowKeyboardPrefs_PRIVATE_FRAMEWORKS := Preferences
 RainbowKeyboardPrefs_PLIST := Resources/Info.plist
 RainbowKeyboardPrefs_RESOURCE_DIRS := Resources
 

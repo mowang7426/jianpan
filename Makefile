@@ -1,5 +1,9 @@
-TARGET := iphone:clang:latest:15.0
-ARCHS ?= arm64
+# Use the SDK installed by CI, including its private-framework link stubs.
+export TARGET := iphone:clang:16.5:15.0
+# Rootless package architecture stays iphoneos-arm64. Its Mach-O binaries
+# need both slices for arm64 apps and arm64e system processes on A12+.
+# RootHide CI explicitly overrides this with ARCHS=arm64e.
+export ARCHS ?= arm64 arm64e
 
 include $(THEOS)/makefiles/common.mk
 
