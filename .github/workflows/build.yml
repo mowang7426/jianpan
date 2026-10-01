@@ -9,6 +9,16 @@ permissions:
   contents: read
 
 jobs:
+  safe-preferences:
+    name: Safe preferences startup and isolation
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify safe source selection and theme behavior
+        run: python3 Tests/run-safe-checks.py
+      - name: Run production relay startup across real processes
+        run: python3 Tests/run-relay-host.py
+
   rootless:
     name: Native Rootless deb
     runs-on: macos-14

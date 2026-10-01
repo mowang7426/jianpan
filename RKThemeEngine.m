@@ -1,4 +1,5 @@
 #import "RKThemeEngine.h"
+#import "RKBuildConfiguration.h"
 static NSDictionary *RKTheme(NSString *name, CGFloat sat, CGFloat bright, CGFloat opacity, CGFloat spread, CGFloat softness, CGFloat core, CGFloat bgStrength, CGFloat bgRadius, CGFloat bgBand, NSInteger colorMode, CGFloat hue) {
     return @{@"name":name, @"NeonSaturation":@(sat), @"Brightness":@(bright), @"Opacity":@(opacity),
              @"Spread":@(spread), @"Softness":@(softness), @"CoreStrength":@(core), @"BackgroundStrength":@(bgStrength),
@@ -39,6 +40,9 @@ static BOOL RKKeycapThemeIsWeTypeProcess(void) {
     return [NSBundle.mainBundle.bundleIdentifier.lowercaseString containsString:@"wetype"];
 }
 static NSInteger RKActiveKeycapTheme(NSDictionary *preferences) {
+#if RK_SAFE_TEST_BUILD
+    return 0; // Keep saved choices, but inactive keycap themes must not recolor candidates.
+#endif
     NSString *key = RKKeycapThemeIsWeTypeProcess() ? @"WeChatTheme" : @"NativeTheme";
     return [preferences[key] integerValue];
 }
@@ -133,6 +137,11 @@ NSDictionary *RKThemeMergedPreferences(NSDictionary *preferences) {
     BOOL wetype = RKKeycapThemeIsWeTypeProcess();
     NSInteger weChatTheme = [preferences[@"WeChatTheme"] integerValue];
     NSInteger nativeTheme = [preferences[@"NativeTheme"] integerValue];
+#if RK_SAFE_TEST_BUILD
+    // Preserve disk settings for a future full build. Only stop inactive keycap
+    // themes forcing CandidateGradient/keyboard flags and press colors at read time.
+    weChatTheme = nativeTheme = 0;
+#endif
     if (wetype && weChatTheme > 0 && weChatTheme <= 8) {
         NSDictionary *keycap = RKWeChatKeycapThemeDefinition(weChatTheme);
         [keycap enumerateKeysAndObjectsUsingBlock:^(NSString *key, id value, BOOL *stop) {

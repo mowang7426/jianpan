@@ -5,7 +5,8 @@
 #include <string.h>
 
 // Display preferences only. Darwin state is not an authenticated IPC channel.
-enum { RKDisplayWordCount = 15 };
+// v3 separates keycap RGB / themes / appearance / numeric fields.
+enum { RKDisplayWordCount = 17 };
 static inline NSArray<NSString *> *RKDisplayNumbers(void) {
     return @[@"Opacity", @"Brightness", @"NeonSaturation", @"Duration", @"Spread", @"Softness",
         @"CoreStrength", @"MaxEffects", @"AmbientStrength", @"BackgroundStrength",
@@ -81,13 +82,13 @@ static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[R
     }
     id weChatTheme = prefs[@"WeChatTheme"];
     if ([weChatTheme isKindOfClass:NSNumber.class] && [weChatTheme integerValue] >= 0 && [weChatTheme integerValue] <= 8) {
-        // Keep the legacy 2-bit field and use the unused word 5 for themes 4-8.
+        // Word 5 belongs to KeycapColor. Theme metadata lives in word 15.
         words[1] |= (uint64_t)([weChatTheme integerValue] & 3) << 54;
-        words[5] = (uint64_t)[weChatTheme integerValue];
+        words[15] |= (uint64_t)[weChatTheme integerValue] | (UINT64_C(1) << 8);
     }
     id nativeTheme = prefs[@"NativeTheme"];
     if ([nativeTheme isKindOfClass:NSNumber.class] && [nativeTheme integerValue] >= 0 && [nativeTheme integerValue] <= 8)
-        words[5] |= ((uint64_t)[nativeTheme integerValue] & 15) << 4;
+        words[15] |= (((uint64_t)[nativeTheme integerValue] & 15) << 4) | (UINT64_C(1) << 9);
     id mode = prefs[@"PressColorMode"];
     if ([mode isKindOfClass:NSNumber.class] && isfinite([mode doubleValue])) {
         words[1] |= UINT64_C(1) << 41;
@@ -149,9 +150,9 @@ static inline void RKEncodeDisplaySnapshot(NSDictionary *prefs, uint64_t words[R
             }
             if (!valid) continue;
             pack |= UINT64_C(1) << (14 + side);
-            words[5] |= packed << (16 + side * 24);
+            words[15] |= packed << (16 + side * 24);
         }
-        words[14] |= pack;
+        words[16] = pack;
     }
 }
 static inline uint64_t RKDisplayChecksum(const uint64_t words[RKDisplayWordCount]) {
@@ -193,27 +194,32 @@ static inline NSDictionary *RKDecodeDisplaySnapshot(const uint64_t words[RKDispl
         if (theme > 13) return nil;
         result[@"Theme"] = @(theme);
     }
-    NSUInteger weChatTheme = (NSUInteger)(words[5] & 15);
-    if (weChatTheme > 8) weChatTheme = (NSUInteger)((words[1] >> 54) & 3);
-    result[@"WeChatTheme"] = @(weChatTheme);
-    NSUInteger nativeTheme = (NSUInteger)((words[5] >> 4) & 15);
-    result[@"NativeTheme"] = @(nativeTheme > 8 ? 0 : nativeTheme);
-    if (words[14] & 1) {
-        result[@"AppearanceModes"] = @((words[14] & 2) != 0);
-        result[@"LightEffectStyle"] = @((words[14] >> 2) & 3);
-        result[@"DarkEffectStyle"] = @((words[14] >> 4) & 3);
-        result[@"LightColorMode"] = @((words[14] >> 6) & 3);
-        result[@"DarkColorMode"] = @((words[14] >> 8) & 3);
-        result[@"LightPressColorMode"] = @((words[14] >> 10) & 1);
-        result[@"DarkPressColorMode"] = @((words[14] >> 11) & 1);
-        if (words[14] & (UINT64_C(1) << 12)) result[@"LightHue"] = @(((words[14] >> 16) & 255) / 255.0);
-        if (words[14] & (UINT64_C(1) << 13)) result[@"DarkHue"] = @(((words[14] >> 24) & 255) / 255.0);
-        if (words[14] & (UINT64_C(1) << 14)) {
-            uint64_t rgb = (words[5] >> 16) & 0xFFFFFF;
+    if (words[15] & (UINT64_C(1) << 8)) {
+        NSUInteger theme = words[15] & 15;
+        if (theme > 8) return nil;
+        result[@"WeChatTheme"] = @(theme);
+    }
+    if (words[15] & (UINT64_C(1) << 9)) {
+        NSUInteger theme = (words[15] >> 4) & 15;
+        if (theme > 8) return nil;
+        result[@"NativeTheme"] = @(theme);
+    }
+    if (words[16] & 1) {
+        result[@"AppearanceModes"] = @((words[16] & 2) != 0);
+        result[@"LightEffectStyle"] = @((words[16] >> 2) & 3);
+        result[@"DarkEffectStyle"] = @((words[16] >> 4) & 3);
+        result[@"LightColorMode"] = @((words[16] >> 6) & 3);
+        result[@"DarkColorMode"] = @((words[16] >> 8) & 3);
+        result[@"LightPressColorMode"] = @((words[16] >> 10) & 1);
+        result[@"DarkPressColorMode"] = @((words[16] >> 11) & 1);
+        if (words[16] & (UINT64_C(1) << 12)) result[@"LightHue"] = @(((words[16] >> 16) & 255) / 255.0);
+        if (words[16] & (UINT64_C(1) << 13)) result[@"DarkHue"] = @(((words[16] >> 24) & 255) / 255.0);
+        if (words[16] & (UINT64_C(1) << 14)) {
+            uint64_t rgb = (words[15] >> 16) & 0xFFFFFF;
             result[@"LightPressColor"] = @[@(((rgb >> 16) & 255) / 255.0), @(((rgb >> 8) & 255) / 255.0), @((rgb & 255) / 255.0)];
         }
-        if (words[14] & (UINT64_C(1) << 15)) {
-            uint64_t rgb = (words[5] >> 40) & 0xFFFFFF;
+        if (words[16] & (UINT64_C(1) << 15)) {
+            uint64_t rgb = (words[15] >> 40) & 0xFFFFFF;
             result[@"DarkPressColor"] = @[@(((rgb >> 16) & 255) / 255.0), @(((rgb >> 8) & 255) / 255.0), @((rgb & 255) / 255.0)];
         }
     }
@@ -236,7 +242,7 @@ static inline int RKDisplayToken(NSUInteger index) {
     dispatch_once(&once, ^{
         for (NSUInteger i = 0; i <= RKDisplayWordCount; i++) {
             tokens[i] = -1;
-            NSString *name = [NSString stringWithFormat:@"com.minis.rainbowkeyboard.snapshot.v2.%lu", (unsigned long)i];
+            NSString *name = [NSString stringWithFormat:@"com.minis.rainbowkeyboard.snapshot.v3.%lu", (unsigned long)i];
             int token = -1;
             if (notify_register_check(name.UTF8String, &token) == NOTIFY_STATUS_OK) tokens[i] = token;
         }

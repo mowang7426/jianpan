@@ -4,6 +4,27 @@
 #import "../RKBlackProbe.h"
 #import "../RKPreferences.h"
 #import "../RKThemeEngine.h"
+#import "../RKBuildConfiguration.h"
+
+static void RKBMarkSafeBuildOptions(NSMutableArray *specifiers) {
+#if RK_SAFE_TEST_BUILD
+    if (!specifiers) return;
+    NSArray *keys = @[@"PureBlackKeyboard", @"NativeTheme", @"WeChatTheme"];
+    NSArray *actions = @[@"chooseKeyboardBackground", @"chooseKeycapColor"];
+    for (PSSpecifier *specifier in specifiers) {
+        if ([keys containsObject:[specifier propertyForKey:@"key"] ?: @""] ||
+            [@[@"键盘底色", @"键帽颜色"] containsObject:specifier.name ?: @""] ||
+            [actions containsObject:[specifier propertyForKey:@"action"] ?: @""]) {
+            [specifier setProperty:@NO forKey:@"enabled"];
+            specifier.name = [specifier.name stringByAppendingString:@"（安全版暂停）"];
+        }
+    }
+    PSSpecifier *notice = [PSSpecifier preferenceSpecifierNamed:@"安全测试版 · 配置同步修复"
+        target:nil set:NULL get:NULL detail:nil cell:PSGroupCell edit:nil];
+    [notice setProperty:@"保留光效与候选词设置。为排查卡死，键帽主题、静态键帽颜色和键盘底色暂停；原有配置保留，不会删除。光效主题、日夜预设和智能性能模式仍可能覆盖或限制部分滑块，核验单项参数时请选自定义并关闭日夜预设。" forKey:@"footerText"];
+    [specifiers insertObject:notice atIndex:0];
+#endif
+}
 
 static NSString * const kRKChangedNotification = @"com.minis.rainbowkeyboard.changed";
 
@@ -135,7 +156,8 @@ static NSArray<NSString *> *RKKeycapThemeTitles(void) {
 
 - (NSMutableArray *)specifiers {
     if (!_specifiers) {
-        _specifiers = [self loadSpecifiersFromPlistName:@"RainbowKeyboard" target:self];
+        _specifiers = [[self loadSpecifiersFromPlistName:@"RainbowKeyboard" target:self] mutableCopy];
+        RKBMarkSafeBuildOptions(_specifiers);
     }
     return _specifiers;
 }
@@ -464,6 +486,7 @@ static NSArray<NSString *> *RKKeycapThemeTitles(void) {
             return [key isEqualToString:@"CandidateStart"] || [key isEqualToString:@"CandidateEnd"];
         }];
         if (remove.count) [loaded removeObjectsAtIndexes:remove];
+        RKBMarkSafeBuildOptions(loaded);
         _specifiers = loaded;
     }
     return _specifiers;

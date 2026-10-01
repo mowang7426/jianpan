@@ -88,7 +88,15 @@ def verify(deb, scheme):
         binaries = (base + 'RainbowKeyboardPrefs', 'Library/MobileSubstrate/DynamicLibraries/RainbowKeyboard.dylib')
         for binary in binaries:
             assert members[prefix + binary].mode & 0o111, 'binary not executable'
-            slices = macho_slices(read(binary))
+            data = read(binary)
+            if binary.endswith('.dylib'):
+                # Reject the known PureBlack-specific hook selectors/diagnostic.
+                # CandidateGradient still has separate drawing hooks by design.
+                for marker in (b'setContentsMultiplyColor:', b'changeBackgroundToActiveIfNecessary',
+                               b'RainbowKeyboard-black-probe-'):
+                    assert marker not in data, 'unsafe black-keyboard implementation linked: ' + repr(marker)
+                assert b'com.minis.rainbowkeyboard.settings.request.v2' in data, 'relay request missing'
+            slices = macho_slices(data)
             found = {a for a, _ in slices}
             assert found == expected_slices, f'{binary}: slices {found}, expected {expected_slices}'
             for arch, dylibs in slices:

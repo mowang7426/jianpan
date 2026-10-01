@@ -1,9 +1,9 @@
 Package: com.minis.rainbowkeyboard
 Name: 彩虹键盘光效
-Version: 1.2.3
+Version: 1.2.4
 Architecture: iphoneos-arm64
-Description: 纯黑键帽与霓虹扩散，支持原生键盘和微信输入法
- 自定义键盘底色、键帽颜色、霓虹亮度与浓淡。
+Description: 安全测试版，修复光效与候选词配置的跨进程恢复。
+ 暂停静态键帽主题和键盘底色处理，不编译高风险黑色键盘 Hook。
  支持粗彩色键框、键缝背光、候选词渐变及独立开关。
  设置内含离线详情与效果预览。
  支持跨 App 配色同步，每个滑条附有作用与调节说明。

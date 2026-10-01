@@ -8,7 +8,9 @@ export ARCHS ?= arm64 arm64e
 include $(THEOS)/makefiles/common.mk
 
 TWEAK_NAME := RainbowKeyboard
-RainbowKeyboard_FILES := RKAdaptivePerformance.m Tweak.xm RainbowEffectView.m RKNeonPress.m RKThemeEngine.m RKKeyboardGeometry.m RKBlackBitmap.m CandidateGradient.xm PureBlackKeyboard.xm
+# Safe target: exclude the entire black-keyboard implementation (including its
+# direct host entry and diagnostic hook installer), but ALWAYS start preferences.
+RainbowKeyboard_FILES := RKPreferencesRelay.m RKBlackKeyboardDisabled.m RKAdaptivePerformance.m Tweak.xm RainbowEffectView.m RKNeonPress.m RKThemeEngine.m RKKeyboardGeometry.m RKBlackBitmap.m CandidateGradient.xm
 RainbowKeyboard_CFLAGS := -fobjc-arc -Wno-deprecated-declarations
 RainbowKeyboard_FRAMEWORKS := UIKit QuartzCore CoreGraphics
 
