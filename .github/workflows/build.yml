@@ -3,12 +3,25 @@ name: Build RainbowKeyboard Native Packages
 on:
   workflow_dispatch:
   push:
-    branches: [ main, master ]
+    branches: [ main, master, 'fix/**' ]
 
 permissions:
   contents: read
 
 jobs:
+  emoji-protection:
+    name: Emoji preservation regression helpers
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+      - name: Run production Unicode and bitmap helper tests
+        run: |
+          set -euo pipefail
+          xcrun clang -fobjc-arc -fblocks -framework Foundation Tests/EmojiProtectionTests.m -I . -o /tmp/emoji-protection-tests
+          /tmp/emoji-protection-tests
+          xcrun clang -std=c11 -Wall -Wextra -Werror Tests/EmojiBitmapTests.c -I . -o /tmp/emoji-bitmap-tests
+          /tmp/emoji-bitmap-tests
+
   rootless:
     name: Native Rootless deb
     runs-on: macos-14

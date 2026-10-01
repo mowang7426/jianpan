@@ -7,11 +7,21 @@
 #import "RKAdaptivePerformance.h"
 #import "RKKeyboardGeometry.h"
 #import "RKThemeEngine.h"
+#import "RKCandidateEmoji.h"
+#import "RKCandidateInk.h"
 
 static NSDictionary *RKCandidatePrefs;
 static CGGradientRef RKCandidateCachedGradient;
 static NSHashTable<UIView *> *RKCandidateViews;
 static __thread NSUInteger RKCandidateDrawingDepth;
+// A native capture may call public string APIs; carry their protection outward.
+static __thread BOOL RKCandidateCapturingGlyphs;
+static __thread BOOL RKCandidateCapturePreserve;
+static BOOL RKNativeTextDrawingEnabled(void);
+static BOOL RKCandidatePreserveDrawing(id text, NSDictionary *attributes);
+static void RKDrawCandidateOriginal(void (^original)(void)) {
+    RKWithCandidateOriginal(&RKCandidateDrawingDepth, original);
+}
 static __thread NSUInteger RKNativeDrawingScope;
 static __thread NSUInteger RKCandidateRenderCount;
 static char RKCandidateRenderedKey;
@@ -214,6 +224,9 @@ static void RKDrawGradientText(CGRect rect, CGRect textRect, void (^original)(vo
     }
 }
 static void RKDrawCandidate(UILabel *label, CGRect rect, BOOL native, void (^original)(void)) {
+    if (RKCandidateCapturingGlyphs && !RKCandidateCapturePreserve &&
+        (RKCandidateAttributedStringContainsEmoji(label.attributedText) || RKCandidateStringContainsEmoji(label.text)))
+        RKCandidateCapturePreserve = YES;
     if (RKCandidateDrawingDepth) { original(); return; }
     if (RKCandidateIsWeType(label)) native = NO;
     BOOL region = native ? RKNativeCandidateRegion(label) : RKCandidateRegion(label);
@@ -223,6 +236,10 @@ static void RKDrawCandidate(UILabel *label, CGRect rect, BOOL native, void (^ori
         !RKCandidateFlag(native ? @"CandidateNative" : @"CandidateWeType")) {
         RKCandidateDrawingDepth++;
         @try { original(); } @finally { RKCandidateDrawingDepth--; }
+        return;
+    }
+    if (RKCandidateAttributedStringContainsEmoji(label.attributedText) || RKCandidateStringContainsEmoji(label.text)) {
+        RKDrawCandidateOriginal(original);
         return;
     }
     RKCandidateStartAnimationIfNeeded();
@@ -237,6 +254,15 @@ static BOOL RKNativeTextDrawingEnabled(void) {
         RKCandidateFlag(RKCandidateIsWeType(nil) ? @"CandidateWeType" : @"CandidateNative");
 }
 
+static BOOL RKCandidatePreserveDrawing(id text, NSDictionary *attributes) {
+    if (!RKCandidateCapturingGlyphs && !RKNativeTextDrawingEnabled()) return NO;
+    BOOL preserve = attributes[@"NSAttachment"] != nil ||
+        ([text isKindOfClass:NSAttributedString.class] ? RKCandidateAttributedStringContainsEmoji(text) :
+                                                       RKCandidateStringContainsEmoji(text));
+    if (preserve && RKCandidateCapturingGlyphs) RKCandidateCapturePreserve = YES;
+    return preserve;
+}
+
 // TUICandidateLabel draws CoreText directly. Capture just its drawRect glyphs, not
 // its background, and use their ink bounds so short words get both endpoint colors.
 static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^original)(void)) {
@@ -247,6 +273,13 @@ static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^origina
         !RKCandidateFlag(RKCandidateIsWeType(view) ? @"CandidateWeType" : @"CandidateNative") ||
         RKCandidateDrawingDepth || !UIGraphicsGetCurrentContext() || CGRectIsEmpty(bounds) ||
         bounds.size.width > 2048 || bounds.size.height > 512) { original(); return; }
+    // Only use public UILabel text APIs, never guess private candidate getters.
+    if ([view isKindOfClass:UILabel.class] &&
+        (RKCandidateAttributedStringContainsEmoji(((UILabel *)view).attributedText) ||
+         RKCandidateStringContainsEmoji(((UILabel *)view).text))) {
+        RKDrawCandidateOriginal(original);
+        return;
+    }
     RKCandidateStartAnimationIfNeeded();
     UIGraphicsImageRendererFormat *format = [UIGraphicsImageRendererFormat defaultFormat];
     format.opaque = NO;
@@ -259,6 +292,11 @@ static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^origina
     UIGraphicsImageRenderer *renderer = [[UIGraphicsImageRenderer alloc] initWithSize:bounds.size format:format];
     __block UIImage *glyphs;
     __block BOOL originalRendered = NO;
+    BOOL preserveCaptured = NO;
+    BOOL wasCapturing = RKCandidateCapturingGlyphs;
+    BOOL previousPreserve = RKCandidateCapturePreserve;
+    RKCandidateCapturingGlyphs = YES;
+    RKCandidateCapturePreserve = NO;
     RKCandidateDrawingDepth++;
     @try {
         glyphs = [renderer imageWithActions:^(UIGraphicsImageRendererContext *context) {
@@ -266,10 +304,19 @@ static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^origina
             originalRendered = YES;
             original();
         }];
-    } @finally { RKCandidateDrawingDepth--; }
+    } @finally {
+        preserveCaptured = RKCandidateCapturePreserve;
+        RKCandidateDrawingDepth--;
+        RKCandidateCapturingGlyphs = wasCapturing;
+        RKCandidateCapturePreserve = previousPreserve;
+    }
     CGImageRef image = glyphs.CGImage;
     if (!image) {
         if (!originalRendered) original();
+        return;
+    }
+    if (preserveCaptured) {
+        RKDrawCandidateOriginal(^{ [glyphs drawInRect:bounds]; });
         return;
     }
     size_t width = CGImageGetWidth(image), height = CGImageGetHeight(image);
@@ -285,13 +332,15 @@ static void RKDrawNativeGlyphView(UIView *view, CGRect dirtyRect, void (^origina
     }
     CGContextDrawImage(scan, CGRectMake(0, 0, width, height), image);
     const uint8_t *bytes = (const uint8_t *)pixels.bytes;
-    size_t minX = width, maxX = 0;
-    for (size_t y = 0; y < height; y++) {
-        for (size_t x = 0; x < width; x++) {
-            if (bytes[(y * width + x) * 4 + 3] > 8) { minX = MIN(minX, x); maxX = MAX(maxX, x); }
-        }
-    }
+    RKCandidateInk metrics = RKScanCandidateInk(bytes, width, height);
+    size_t minX = metrics.minX, maxX = metrics.maxX;
     CGContextRelease(scan);
+    if (metrics.chromatic) {
+        // Unknown private glyph view: preserve all original pixels, including
+        // mixed emoji/text. Colored ordinary text may conservatively bypass too.
+        RKDrawCandidateOriginal(^{ [glyphs drawInRect:bounds]; });
+        return;
+    }
     if (minX > maxX) return;
     CGRect ink = CGRectMake(bounds.origin.x + minX / glyphs.scale, bounds.origin.y,
                             (maxX - minX + 1) / glyphs.scale, bounds.size.height);
@@ -433,6 +482,10 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook NSString
 - (void)drawInRect:(CGRect)rect withAttributes:(NSDictionary *)attributes {
+    if (RKCandidatePreserveDrawing(self, attributes)) {
+        RKDrawCandidateOriginal(^{ %orig; });
+        return;
+    }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
@@ -443,6 +496,10 @@ static void RKWriteNativeDiagnostic(void) {
  });
 }
 - (void)drawAtPoint:(CGPoint)point withAttributes:(NSDictionary *)attributes {
+    if (RKCandidatePreserveDrawing(self, attributes)) {
+        RKDrawCandidateOriginal(^{ %orig; });
+        return;
+    }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
@@ -452,6 +509,10 @@ static void RKWriteNativeDiagnostic(void) {
  });
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options attributes:(NSDictionary *)attributes context:(NSStringDrawingContext *)context {
+    if (RKCandidatePreserveDrawing(self, attributes)) {
+        RKDrawCandidateOriginal(^{ %orig; });
+        return;
+    }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
@@ -464,6 +525,10 @@ static void RKWriteNativeDiagnostic(void) {
 
 %hook NSAttributedString
 - (void)drawInRect:(CGRect)rect {
+    if (RKCandidatePreserveDrawing(self, nil)) {
+        RKDrawCandidateOriginal(^{ %orig; });
+        return;
+    }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
@@ -474,6 +539,10 @@ static void RKWriteNativeDiagnostic(void) {
  });
 }
 - (void)drawAtPoint:(CGPoint)point {
+    if (RKCandidatePreserveDrawing(self, nil)) {
+        RKDrawCandidateOriginal(^{ %orig; });
+        return;
+    }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
@@ -483,6 +552,10 @@ static void RKWriteNativeDiagnostic(void) {
  });
 }
 - (void)drawWithRect:(CGRect)rect options:(NSStringDrawingOptions)options context:(NSStringDrawingContext *)context {
+    if (RKCandidatePreserveDrawing(self, nil)) {
+        RKDrawCandidateOriginal(^{ %orig; });
+        return;
+    }
     if (!RKKeyboardSessionActive() || !RKNativeTextDrawingEnabled()) { 
         %orig;
  return; }
