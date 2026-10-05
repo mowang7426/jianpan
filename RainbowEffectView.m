@@ -743,6 +743,86 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Transparent after expiration; the next press evicts old layers (max two).
 }
 
+- (void)showAmbientBedAtPoint:(CGPoint)point {
+    CGRect key=[self pressedKeyAtPoint:point]; if(CGRectIsNull(key)) return;
+    CGFloat a=[self number:@"Opacity" fallback:.65 low:0 high:1];
+    UIColor *c=[UIColor colorWithHue:fmod(self.hue+=.11,1) saturation:.8 brightness:1 alpha:1];
+    CALayer *p=[CALayer layer]; p.name=@"RKNewAmbientBed"; p.frame=self.bounds;
+    CAGradientLayer *g=[CAGradientLayer layer]; g.frame=self.bounds;
+    g.colors=@[(id)[c colorWithAlphaComponent:.05].CGColor,(id)[c colorWithAlphaComponent:.6].CGColor,(id)[c colorWithAlphaComponent:.05].CGColor];
+    [p addSublayer:g]; [self.layer addSublayer:p];
+    CABasicAnimation *s=[CABasicAnimation animationWithKeyPath:@"position.x"]; s.fromValue=@(-self.bounds.size.width); s.toValue=@(self.bounds.size.width); s.duration=1.1; [g addAnimation:s forKey:@"ambientSweep"];
+    CAKeyframeAnimation *f=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; f.values=@[@0,@(a),@0]; f.duration=1.2; [p addAnimation:f forKey:@"ambientFade"];
+}
+- (void)showMechanicalWaveAtPoint:(CGPoint)point {
+    CGRect key=[self pressedKeyAtPoint:point]; if(CGRectIsNull(key)) return;
+    UIColor *c=[UIColor colorWithHue:fmod(self.hue+=.17,1) saturation:1 brightness:1 alpha:1]; CALayer *p=[CALayer layer]; p.name=@"RKNewMechanicalWave"; p.frame=self.bounds; [self.layer addSublayer:p];
+    CGPoint o=CGPointMake(CGRectGetMidX(key),CGRectGetMidY(key));
+    for(NSValue *v in self.keyFrames){ CGRect r=v.CGRectValue; CGFloat d=hypot(CGRectGetMidX(r)-o.x,CGRectGetMidY(r)-o.y); if(d>180) continue; CAShapeLayer *k=[CAShapeLayer layer]; k.frame=self.bounds; k.path=RKKeyboardKeyFacePath(r).CGPath; k.fillColor=UIColor.clearColor.CGColor; k.strokeColor=c.CGColor; k.lineWidth=2.5; [p addSublayer:k]; CAKeyframeAnimation *a=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; a.values=@[@0,@1,@0]; a.duration=.45; a.beginTime=[p convertTime:CACurrentMediaTime() fromLayer:nil]+d/400.; [k addAnimation:a forKey:@"waveStep"]; }
+}
+- (void)showEmberTrailAtPoint:(CGPoint)point {
+    CGRect key=[self pressedKeyAtPoint:point]; if(CGRectIsNull(key)) return; UIColor *c=[UIColor colorWithHue:fmod(self.hue+=.03,1) saturation:1 brightness:1 alpha:1]; CALayer *p=[CALayer layer]; p.name=@"RKNewEmberTrail"; p.frame=self.bounds; [self.layer addSublayer:p]; CGPoint o=CGPointMake(CGRectGetMidX(key),CGRectGetMidY(key));
+    for(NSValue *v in self.keyFrames){ CGRect r=v.CGRectValue; CGFloat d=hypot(CGRectGetMidX(r)-o.x,CGRectGetMidY(r)-o.y); if(d>130) continue; CAShapeLayer *k=[CAShapeLayer layer]; k.frame=self.bounds; k.path=RKKeyboardKeyFacePath(r).CGPath; k.fillColor=c.CGColor; k.strokeColor=c.CGColor; k.opacity=d<2?1:.2; [p addSublayer:k]; CABasicAnimation *a=[CABasicAnimation animationWithKeyPath:@"opacity"]; a.fromValue=@(k.opacity); a.toValue=@0; a.beginTime=[p convertTime:CACurrentMediaTime() fromLayer:nil]+d/220.; a.duration=1.5; [k addAnimation:a forKey:@"emberFade"]; }
+}
+- (void)showGapFlowAtPoint:(CGPoint)point {
+    CGRect pressed = [self pressedKeyAtPoint:point];
+    if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
+    CGFloat brightness = [self number:@"Brightness" fallback:.95 low:0 high:1];
+    CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
+    if (brightness <= 0 || alpha <= 0) return;
+    BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
+    NSUInteger limit = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2 ? 1 : 2;
+    while (self.layer.sublayers.count >= limit) [self.layer.sublayers.firstObject removeFromSuperlayer];
+    NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
+    self.hue = fmod(self.hue + .137, 1);
+    CGFloat hue = mode == 1 ? [self number:@"Hue" fallback:.55 low:0 high:1] :
+        (mode == 2 ? point.x / MAX(1, self.bounds.size.width) : self.hue);
+    UIColor *color = [UIColor colorWithHue:hue saturation:[self neonSaturation:1] brightness:brightness alpha:1];
+    CALayer *pulse = [CALayer layer];
+    pulse.name = @"RKKeyGapFlow";
+    pulse.frame = self.bounds;
+    pulse.opacity = 0;
+    [self.layer addSublayer:pulse];
+    NSMutableArray *ordered = [NSMutableArray arrayWithArray:self.keyFrames];
+    CGPoint pc = CGPointMake(CGRectGetMidX(pressed), CGRectGetMidY(pressed));
+    [ordered sortUsingComparator:^NSComparisonResult(NSValue *a, NSValue *b) {
+        CGRect ra = a.CGRectValue, rb = b.CGRectValue;
+        CGFloat da = hypot(CGRectGetMidX(ra)-pc.x, CGRectGetMidY(ra)-pc.y);
+        CGFloat db = hypot(CGRectGetMidX(rb)-pc.x, CGRectGetMidY(rb)-pc.y);
+        return da < db ? NSOrderedAscending : (da > db ? NSOrderedDescending : NSOrderedSame);
+    }];
+    CGFloat duration = MIN(.95, MAX(.48, [self number:@"Duration" fallback:.55 low:.15 high:1.2] * 1.25));
+    CGFloat spacing = MAX(18, MIN(52, hypot(pressed.size.width, pressed.size.height) * .7));
+    for (NSUInteger i = 0; i < ordered.count; i++) {
+        NSValue *keyValue = [ordered objectAtIndex:i];
+        CGRect r = keyValue.CGRectValue;
+        CGFloat distance = hypot(CGRectGetMidX(r)-pc.x, CGRectGetMidY(r)-pc.y);
+        if (!reduce && distance > spacing * 5.0) continue;
+        UIBezierPath *face = RKKeyboardKeyFacePath(r);
+        CAShapeLayer *ring = [CAShapeLayer layer];
+        ring.frame = self.bounds;
+        ring.path = face.CGPath;
+        ring.fillColor = UIColor.clearColor.CGColor;
+        ring.strokeColor = [color colorWithAlphaComponent:(i == 0 ? 1.0 : .72)].CGColor;
+        ring.lineWidth = i == 0 ? 3.2 : 2.2;
+        ring.opacity = 0;
+        [pulse addSublayer:ring];
+        CGFloat delay = reduce ? 0 : MIN(.46, distance / spacing * .065);
+        CAKeyframeAnimation *light = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+        light.values = @[@0, @(alpha), @(alpha * (i == 0 ? .58 : .34)), @0];
+        light.keyTimes = @[@0, @.08, @.44, @1];
+        light.beginTime = [pulse convertTime:CACurrentMediaTime() fromLayer:nil] + delay;
+        light.duration = duration;
+        [ring addAnimation:light forKey:@"gapKeyLight"];
+    }
+    CAKeyframeAnimation *life = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
+    life.values = @[@1, @1, @0];
+    life.keyTimes = @[@0, @.72, @1];
+    life.duration = duration + .5;
+    [pulse addAnimation:life forKey:@"gapFlowLifetime"];
+}
+
+
 - (void)showRippleAtPoint:(CGPoint)point sourceView:(UIView *)sourceView {
     // Configuration is cached and invalidated by the settings Darwin notification.
     // Do not perform preference/transport checks on every key press.
@@ -755,12 +835,12 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     }
     if (!self.window || self.hidden) return;
     NSInteger style = (NSInteger)[self number:@"EffectStyle" fallback:0 low:0 high:7];
+    if(style==4){[self showAmbientBedAtPoint:point];return;}
+    if(style==5){[self showMechanicalWaveAtPoint:point];return;}
+    if(style==6){[self showEmberTrailAtPoint:point];return;}
+    if(style==7){[self showGapFlowAtPoint:point];return;}
     // Bed-only styles must not coexist with a captured keycap feedback layer.
     if (style == 0 || style == 1 || style >= 3) [self clearLegacyKeycapFeedback];
-    if (style == 4) { [self showAmbientBedAtPoint:point]; return; }
-    if (style == 5) { [self showMechanicalWaveAtPoint:point]; return; }
-    if (style == 6) { [self showEmberTrailAtPoint:point]; return; }
-    if (style == 7) { [self showGapFlowAtPoint:point]; return; }
     // Keep the user's original configured style; adaptive mode only reduces work.
     if (style != self.lastStyle) {
         for (CALayer *layer in self.layer.sublayers.copy) [layer removeFromSuperlayer];
