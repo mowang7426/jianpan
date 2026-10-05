@@ -4,12 +4,12 @@
     CandidateGradientMode = 1;
     CandidateGradientSpeed = 0.65;
     CandidateGradientIntensity = 1.0;
-    EffectStyle = 0;
+    EffectStyle = 3;
     AppearanceModes = 0;
-    LightEffectStyle = 2;
+    LightEffectStyle = 3;
     LightColorMode = 0;
     LightPressColorMode = 0;
-    DarkEffectStyle = 1;
+    DarkEffectStyle = 2;
     DarkColorMode = 0;
     DarkPressColorMode = 0;
     AmbientGlow = 1;
