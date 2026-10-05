@@ -625,6 +625,18 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Shared lifetime and eviction: no timers, snapshots or per-neighbor waves.
 }
 
+- (CGRect)pressedKeyAtPoint:(CGPoint)point {
+    CGRect pressed = CGRectNull;
+    for (NSValue *value in self.keyFrames) {
+        CGRect rect = value.CGRectValue;
+        if (CGRectContainsPoint(rect, point) &&
+            (CGRectIsNull(pressed) || rect.size.width * rect.size.height < pressed.size.width * pressed.size.height)) {
+            pressed = rect;
+        }
+    }
+    return pressed;
+}
+
 - (void)showGapFlowAtPoint:(CGPoint)point {
     CGRect pressed = [self pressedKeyAtPoint:point];
     if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
@@ -655,7 +667,8 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     CGFloat duration = MIN(.95, MAX(.48, [self number:@"Duration" fallback:.55 low:.15 high:1.2] * 1.25));
     CGFloat spacing = MAX(18, MIN(52, hypot(pressed.size.width, pressed.size.height) * .7));
     for (NSUInteger i = 0; i < ordered.count; i++) {
-        CGRect r = ordered[i].CGRectValue;
+        NSValue *keyValue = [ordered objectAtIndex:i];
+        CGRect r = keyValue.CGRectValue;
         CGFloat distance = hypot(CGRectGetMidX(r)-pc.x, CGRectGetMidY(r)-pc.y);
         if (!reduce && distance > spacing * 5.0) continue;
         UIBezierPath *face = RKKeyboardKeyFacePath(r);
