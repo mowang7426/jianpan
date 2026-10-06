@@ -625,7 +625,7 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Shared lifetime and eviction: no timers, snapshots or per-neighbor waves.
 }
 
-'- (void)showGapFlowAtPoint:(CGPoint)point {
+- (void)showGapFlowAtPoint:(CGPoint)point {
     CGRect key=[self pressedKeyAtPoint:point]; if (CGRectIsNull(key)) return;
     for (CALayer *layer in self.layer.sublayers.copy) if ([layer.name isEqualToString:@"RKKeyGapFlow"]) [layer removeFromSuperlayer];
     CGFloat alpha=[self number:@"Opacity" fallback:.65 low:0 high:1]; self.hue=fmod(self.hue+.21,1);
