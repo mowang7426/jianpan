@@ -297,8 +297,8 @@ static NSArray<NSString *> *RKKeycapThemeTitles(void) {
 - (void)chooseEffectStyle {
         [self chooseSimpleOptionForKey:@"EffectStyle"
                              title:@"光效风格"
-                           options:@[@"波纹", @"扩散", @"轻弹", @"流光底韵", @"RGB 底板氛围", @"机械波", @"余烬残光", @"底部缝隙传光"]
-                            values:@[@0, @1, @2, @3, @4, @5, @6, @7]];
+                           options:@[@"波纹", @"扩散", @"轻弹", @"流光底韵", @"RGB 底板氛围", @"机械波", @"键底扩散"]
+                            values:@[@0, @1, @2, @3, @4, @5, @6]];
 }
 
 - (void)chooseColorMode {
@@ -348,7 +348,7 @@ static NSArray<NSString *> *RKKeycapThemeTitles(void) {
     } else if ([key isEqualToString:@"LightEffectStyle"] || [key isEqualToString:@"DarkEffectStyle"]) {
         cell.detailTextLabel.text = RKAppearancePresetTitle(RKReadPreferences(), [key isEqualToString:@"DarkEffectStyle"]);
     } else if ([key isEqualToString:@"EffectStyle"]) {
-        NSArray *titles = @[@"波纹", @"扩散", @"轻弹", @"流光底韵", @"RGB 底板氛围", @"机械波", @"余烬残光", @"底部缝隙传光"];
+        NSArray *titles = @[@"波纹", @"扩散", @"轻弹", @"流光底韵", @"RGB 底板氛围", @"机械波", @"键底扩散"];
         NSInteger value = [RKReadPreferences()[key] integerValue];
         cell.detailTextLabel.text = (value >= 0 && value < (NSInteger)titles.count) ? titles[value] : @"波纹";
     } else if ([key isEqualToString:@"ColorMode"]) {
