@@ -625,6 +625,19 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
     // Shared lifetime and eviction: no timers, snapshots or per-neighbor waves.
 }
 
+'- (void)showGapFlowAtPoint:(CGPoint)point {
+    CGRect key=[self pressedKeyAtPoint:point]; if (CGRectIsNull(key)) return;
+    for (CALayer *layer in self.layer.sublayers.copy) if ([layer.name isEqualToString:@"RKKeyGapFlow"]) [layer removeFromSuperlayer];
+    CGFloat alpha=[self number:@"Opacity" fallback:.65 low:0 high:1]; self.hue=fmod(self.hue+.21,1);
+    UIColor *c=[UIColor colorWithHue:self.hue saturation:.8 brightness:1 alpha:1]; CALayer *p=[CALayer layer]; p.name=@"RKKeyGapFlow"; p.frame=self.bounds; [self.layer addSublayer:p];
+    CGPoint o=CGPointMake(CGRectGetMidX(key),CGRectGetMidY(key)); NSMutableArray *near=[NSMutableArray arrayWithArray:self.keyFrames];
+    [near sortUsingComparator:^NSComparisonResult(NSValue *x,NSValue *y){CGRect a=x.CGRectValue,b=y.CGRectValue; CGFloat da=hypot(CGRectGetMidX(a)-o.x,CGRectGetMidY(a)-o.y),db=hypot(CGRectGetMidX(b)-o.x,CGRectGetMidY(b)-o.y); return da<db?NSOrderedAscending:(da>db?NSOrderedDescending:NSOrderedSame);}];
+    NSUInteger count=MIN((NSUInteger)9,near.count); CGFloat duration=.72;
+    for(NSUInteger i=0;i<count;i++){ CGRect r=[near[i] CGRectValue]; CAShapeLayer *dot=[CAShapeLayer layer]; dot.frame=self.bounds; CGFloat sz=i?3.0:5.5; dot.path=[UIBezierPath bezierPathWithOvalInRect:CGRectMake(CGRectGetMidX(r)-sz,CGRectGetMidY(r)-sz,sz*2,sz*2)].CGPath; dot.fillColor=[c colorWithAlphaComponent:i?(.35*alpha):alpha].CGColor; [p addSublayer:dot]; CAKeyframeAnimation *a=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; a.values=@[@0,@1,@0]; a.keyTimes=@[@0,@.12,@1]; a.beginTime=[p convertTime:CACurrentMediaTime() fromLayer:nil]+i*.055; a.duration=duration; [dot addAnimation:a forKey:@"starPulse"]; }
+    CAKeyframeAnimation *life=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; life.values=@[@1,@1,@0]; life.keyTimes=@[@0,@.7,@1]; life.duration=duration+.5; [p addAnimation:life forKey:@"starLife"];
+}
+
+
 - (void)showRippleAtPoint:(CGPoint)point {
     [self showRippleAtPoint:point sourceView:nil];
 }
@@ -744,96 +757,47 @@ static void RKEffectPreferencesChanged(CFNotificationCenterRef center, void *obs
 }
 
 - (void)showAmbientBedAtPoint:(CGPoint)point {
-    CGRect key=[self pressedKeyAtPoint:point]; if(CGRectIsNull(key)) return;
-    for (CALayer *layer in self.layer.sublayers.copy) {
-        if ([layer.name isEqualToString:@"RKNewAmbientBed"]) [layer removeFromSuperlayer];
-    }
-    CGFloat a=[self number:@"Opacity" fallback:.65 low:0 high:1];
-    UIColor *c=[UIColor colorWithHue:fmod(self.hue+=.11,1) saturation:.8 brightness:1 alpha:1];
-    CALayer *p=[CALayer layer]; p.name=@"RKNewAmbientBed"; p.frame=self.bounds;
-    CAGradientLayer *g=[CAGradientLayer layer]; g.frame=self.bounds;
-    g.colors=@[(id)[c colorWithAlphaComponent:.05].CGColor,(id)[c colorWithAlphaComponent:.6].CGColor,(id)[c colorWithAlphaComponent:.05].CGColor];
+    CGRect key=[self pressedKeyAtPoint:point]; if (CGRectIsNull(key) || CGRectIsEmpty(self.bounds)) return;
+    for (CALayer *layer in self.layer.sublayers.copy) if ([layer.name isEqualToString:@"RKNewAmbientBed"]) [layer removeFromSuperlayer];
+    CGFloat alpha=[self number:@"Opacity" fallback:.65 low:0 high:1];
+    CGFloat brightness=[self number:@"Brightness" fallback:.95 low:0 high:1];
+    if (alpha<=0 || brightness<=0) return;
+    self.hue=fmod(self.hue+.09,1);
+    UIColor *c=[UIColor colorWithHue:self.hue saturation:.78 brightness:brightness alpha:1];
+    CALayer *p=[CALayer layer]; p.name=@"RKNewAmbientBed"; p.frame=self.bounds; p.opacity=0;
+    p.mask=[self waveUnderCapMask];
+    CAGradientLayer *g=[CAGradientLayer layer];
+    g.frame=CGRectMake(-self.bounds.size.width,0,self.bounds.size.width*3,self.bounds.size.height);
+    g.colors=@[(id)[c colorWithAlphaComponent:0].CGColor,(id)[c colorWithAlphaComponent:.18].CGColor,(id)[c colorWithAlphaComponent:.82].CGColor,(id)[c colorWithAlphaComponent:.12].CGColor,(id)[c colorWithAlphaComponent:0].CGColor];
+    g.locations=@[@0,@.34,@.5,@.66,@1];
     [p addSublayer:g]; [self.layer addSublayer:p];
-    p.mask = [self waveUnderCapMask];
-    p.opacity = .72;
-    CABasicAnimation *s=[CABasicAnimation animationWithKeyPath:@"position.x"]; s.fromValue=@(-self.bounds.size.width); s.toValue=@(self.bounds.size.width); s.duration=1.1; [g addAnimation:s forKey:@"ambientSweep"];
-    CAKeyframeAnimation *f=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; f.values=@[@0,@(a),@0]; f.duration=1.2; [p addAnimation:f forKey:@"ambientFade"];
+    CGFloat d=MIN(.9,MAX(.5,[self number:@"Duration" fallback:.65 low:.15 high:1.2]));
+    CABasicAnimation *slide=[CABasicAnimation animationWithKeyPath:@"position.x"]; slide.fromValue=@(-self.bounds.size.width*.55); slide.toValue=@(self.bounds.size.width*1.55); slide.duration=d; slide.timingFunction=[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseInEaseOut]; [g addAnimation:slide forKey:@"auroraSlide"];
+    CAKeyframeAnimation *fade=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; fade.values=@[@0,@(alpha),@(alpha*.72),@0]; fade.keyTimes=@[@0,@.18,@.62,@1]; fade.duration=d+.18; [p addAnimation:fade forKey:@"auroraLife"];
 }
 - (void)showMechanicalWaveAtPoint:(CGPoint)point {
-    CGRect key=[self pressedKeyAtPoint:point]; if(CGRectIsNull(key)) return;
-    for (CALayer *layer in self.layer.sublayers.copy) {
-        if ([layer.name isEqualToString:@"RKNewMechanicalWave"]) [layer removeFromSuperlayer];
-    }
-    UIColor *c=[UIColor colorWithHue:fmod(self.hue+=.17,1) saturation:1 brightness:1 alpha:1]; CALayer *p=[CALayer layer]; p.name=@"RKNewMechanicalWave"; p.frame=self.bounds; [self.layer addSublayer:p];
-    CGPoint o=CGPointMake(CGRectGetMidX(key),CGRectGetMidY(key));
-    NSUInteger added=0;
-    for(NSValue *v in self.keyFrames){ CGRect r=v.CGRectValue; CGFloat d=hypot(CGRectGetMidX(r)-o.x,CGRectGetMidY(r)-o.y); if(d>180 || added++ >= 12) continue; CAShapeLayer *k=[CAShapeLayer layer]; k.frame=self.bounds; k.path=RKKeyboardKeyFacePath(r).CGPath; k.fillColor=UIColor.clearColor.CGColor; k.strokeColor=c.CGColor; k.lineWidth=2.5; [p addSublayer:k]; CAKeyframeAnimation *a=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; a.values=@[@0,@1,@0]; a.duration=.45; a.beginTime=[p convertTime:CACurrentMediaTime() fromLayer:nil]+d/400.; [k addAnimation:a forKey:@"waveStep"]; }
+    CGRect key=[self pressedKeyAtPoint:point]; if (CGRectIsNull(key)) return;
+    for (CALayer *layer in self.layer.sublayers.copy) if ([layer.name isEqualToString:@"RKNewMechanicalWave"]) [layer removeFromSuperlayer];
+    CGFloat alpha=[self number:@"Opacity" fallback:.65 low:0 high:1]; self.hue=fmod(self.hue+.14,1);
+    UIColor *c=[UIColor colorWithHue:self.hue saturation:.9 brightness:1 alpha:1];
+    CALayer *p=[CALayer layer]; p.name=@"RKNewMechanicalWave"; p.frame=self.bounds; [self.layer addSublayer:p];
+    CGPoint o=CGPointMake(CGRectGetMidX(key),CGRectGetMaxY(key)); CGFloat r=MIN(190,MAX(85,[self number:@"BackgroundRadius" fallback:150 low:60 high:360]));
+    UIBezierPath *a=[UIBezierPath bezierPathWithOvalInRect:CGRectMake(o.x-8,o.y-8,16,16)];
+    UIBezierPath *b=[UIBezierPath bezierPathWithOvalInRect:CGRectMake(o.x-r,o.y-r,r*2,r*2)];
+    for (NSUInteger i=0;i<2;i++) { CAShapeLayer *ring=[CAShapeLayer layer]; ring.frame=self.bounds; ring.fillColor=UIColor.clearColor.CGColor; ring.strokeColor=[c colorWithAlphaComponent:i?.9:.24].CGColor; ring.lineWidth=i?3.2:15; ring.path=b.CGPath; [p addSublayer:ring]; CABasicAnimation *path=[CABasicAnimation animationWithKeyPath:@"path"]; path.fromValue=(__bridge id)a.CGPath; path.toValue=(__bridge id)b.CGPath; path.duration=.62+i*.1; path.timingFunction=[CAMediaTimingFunction functionWithName:kCAMediaTimingFunctionEaseOut]; [ring addAnimation:path forKey:@"rippleExpand"]; CAKeyframeAnimation *fade=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; fade.values=@[@0,@(alpha),@0]; fade.keyTimes=@[@0,@.12,@1]; fade.duration=.7+i*.1; [ring addAnimation:fade forKey:@"rippleFade"]; }
 }
 - (void)showEmberTrailAtPoint:(CGPoint)point {
-    CGRect key=[self pressedKeyAtPoint:point]; if(CGRectIsNull(key)) return; for (CALayer *layer in self.layer.sublayers.copy) { if ([layer.name isEqualToString:@"RKNewEmberTrail"]) [layer removeFromSuperlayer]; } UIColor *c=[UIColor colorWithHue:fmod(self.hue+=.03,1) saturation:1 brightness:1 alpha:1]; CALayer *p=[CALayer layer]; p.name=@"RKNewEmberTrail"; p.frame=self.bounds; [self.layer addSublayer:p]; CGPoint o=CGPointMake(CGRectGetMidX(key),CGRectGetMidY(key));
-    NSUInteger added=0;
-    for(NSValue *v in self.keyFrames){ CGRect r=v.CGRectValue; CGFloat d=hypot(CGRectGetMidX(r)-o.x,CGRectGetMidY(r)-o.y); if(d>130 || added++ >= 10) continue; CAShapeLayer *k=[CAShapeLayer layer]; k.frame=self.bounds; k.path=RKKeyboardKeyFacePath(r).CGPath; k.fillColor=c.CGColor; k.strokeColor=c.CGColor; k.opacity=d<2?1:.2; [p addSublayer:k]; CABasicAnimation *a=[CABasicAnimation animationWithKeyPath:@"opacity"]; a.fromValue=@(k.opacity); a.toValue=@0; a.beginTime=[p convertTime:CACurrentMediaTime() fromLayer:nil]+d/220.; a.duration=1.5; [k addAnimation:a forKey:@"emberFade"]; }
-}
-- (void)showGapFlowAtPoint:(CGPoint)point {
-    CGRect pressed = [self pressedKeyAtPoint:point];
-    if (CGRectIsNull(pressed) || CGRectIsEmpty(self.bounds)) return;
-    CGFloat brightness = [self number:@"Brightness" fallback:.95 low:0 high:1];
-    CGFloat alpha = [self number:@"Opacity" fallback:.65 low:0 high:1];
-    if (brightness <= 0 || alpha <= 0) return;
-    BOOL reduce = UIAccessibilityIsReduceMotionEnabled();
-    for (CALayer *layer in self.layer.sublayers.copy) {
-        if ([layer.name isEqualToString:@"RKKeyGapFlow"]) [layer removeFromSuperlayer];
-    }
-    NSUInteger limit = RKAdaptiveFastInput() || RKAdaptiveLevel() >= 2 ? 6 : 12;
-    NSInteger mode = (NSInteger)[self number:@"ColorMode" fallback:0 low:0 high:2];
-    self.hue = fmod(self.hue + .137, 1);
-    CGFloat hue = mode == 1 ? [self number:@"Hue" fallback:.55 low:0 high:1] :
-        (mode == 2 ? point.x / MAX(1, self.bounds.size.width) : self.hue);
-    UIColor *color = [UIColor colorWithHue:hue saturation:[self neonSaturation:1] brightness:brightness alpha:1];
-    CALayer *pulse = [CALayer layer];
-    pulse.name = @"RKKeyGapFlow";
-    pulse.frame = self.bounds;
-    pulse.opacity = 0;
-    [self.layer addSublayer:pulse];
-    NSMutableArray *ordered = [NSMutableArray arrayWithArray:self.keyFrames];
-    CGPoint pc = CGPointMake(CGRectGetMidX(pressed), CGRectGetMidY(pressed));
-    [ordered sortUsingComparator:^NSComparisonResult(NSValue *a, NSValue *b) {
-        CGRect ra = a.CGRectValue, rb = b.CGRectValue;
-        CGFloat da = hypot(CGRectGetMidX(ra)-pc.x, CGRectGetMidY(ra)-pc.y);
-        CGFloat db = hypot(CGRectGetMidX(rb)-pc.x, CGRectGetMidY(rb)-pc.y);
-        return da < db ? NSOrderedAscending : (da > db ? NSOrderedDescending : NSOrderedSame);
-    }];
-    CGFloat duration = MIN(.95, MAX(.48, [self number:@"Duration" fallback:.55 low:.15 high:1.2] * 1.25));
-    CGFloat spacing = MAX(18, MIN(52, hypot(pressed.size.width, pressed.size.height) * .7));
-    NSUInteger added = 0;
-    for (NSUInteger i = 0; i < ordered.count; i++) {
-        if (added >= limit) break;
-        NSValue *keyValue = [ordered objectAtIndex:i];
-        CGRect r = keyValue.CGRectValue;
-        CGFloat distance = hypot(CGRectGetMidX(r)-pc.x, CGRectGetMidY(r)-pc.y);
-        if (!reduce && distance > spacing * 5.0) continue;
-        UIBezierPath *face = RKKeyboardKeyFacePath(r);
-        CAShapeLayer *ring = [CAShapeLayer layer];
-        ring.frame = self.bounds;
-        ring.path = face.CGPath;
-        ring.fillColor = UIColor.clearColor.CGColor;
-        ring.strokeColor = [color colorWithAlphaComponent:(i == 0 ? 1.0 : .72)].CGColor;
-        ring.lineWidth = i == 0 ? 3.2 : 2.2;
-        [pulse addSublayer:ring];
-        added++;
-        CGFloat delay = reduce ? 0 : MIN(.46, distance / spacing * .065);
-        CAKeyframeAnimation *light = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-        light.values = @[@0, @(alpha), @(alpha * (i == 0 ? .58 : .34)), @0];
-        light.keyTimes = @[@0, @.08, @.44, @1];
-        light.beginTime = [pulse convertTime:CACurrentMediaTime() fromLayer:nil] + delay;
-        light.duration = duration;
-        [ring addAnimation:light forKey:@"gapKeyLight"];
-    }
-    CAKeyframeAnimation *life = [CAKeyframeAnimation animationWithKeyPath:@"opacity"];
-    life.values = @[@1, @1, @0];
-    life.keyTimes = @[@0, @.72, @1];
-    life.duration = duration + .5;
-    [pulse addAnimation:life forKey:@"gapFlowLifetime"];
+    CGRect key=[self pressedKeyAtPoint:point]; if (CGRectIsNull(key)) return;
+    for (CALayer *layer in self.layer.sublayers.copy) if ([layer.name isEqualToString:@"RKNewEmberTrail"]) [layer removeFromSuperlayer];
+    self.hue=fmod(self.hue+.035,1); UIColor *c=[UIColor colorWithHue:self.hue saturation:.95 brightness:1 alpha:1];
+    CALayer *p=[CALayer layer]; p.name=@"RKNewEmberTrail"; p.frame=self.bounds; [self.layer addSublayer:p];
+    CGPoint o=CGPointMake(CGRectGetMidX(key),CGRectGetMidY(key)); NSMutableArray *near=[NSMutableArray arrayWithArray:self.keyFrames];
+    [near sortUsingComparator:^NSComparisonResult(NSValue *x,NSValue *y){CGRect a=x.CGRectValue,b=y.CGRectValue; CGFloat da=hypot(CGRectGetMidX(a)-o.x,CGRectGetMidY(a)-o.y),db=hypot(CGRectGetMidX(b)-o.x,CGRectGetMidY(b)-o.y); return da<db?NSOrderedAscending:(da>db?NSOrderedDescending:NSOrderedSame);}];
+    NSUInteger count=MIN((NSUInteger)7,near.count); UIBezierPath *trail=[UIBezierPath bezierPath];
+    for(NSUInteger i=0;i<count;i++){CGRect r=[near[i] CGRectValue]; CGPoint q=CGPointMake(CGRectGetMidX(r),CGRectGetMidY(r)); if(i==0)[trail moveToPoint:q]; else [trail addLineToPoint:q];}
+    CAShapeLayer *line=[CAShapeLayer layer]; line.frame=self.bounds; line.path=trail.CGPath; line.fillColor=UIColor.clearColor.CGColor; line.strokeColor=[c colorWithAlphaComponent:.95].CGColor; line.lineWidth=3; line.lineCap=kCALineCapRound; line.lineJoin=kCALineJoinRound; [p addSublayer:line];
+    CABasicAnimation *draw=[CABasicAnimation animationWithKeyPath:@"strokeEnd"]; draw.fromValue=@0; draw.toValue=@1; draw.duration=.42; [line addAnimation:draw forKey:@"cometDraw"];
+    CAKeyframeAnimation *fade=[CAKeyframeAnimation animationWithKeyPath:@"opacity"]; fade.values=@[@0,@1,@.75,@0]; fade.keyTimes=@[@0,@.12,@.55,@1]; fade.duration=.9; [p addAnimation:fade forKey:@"cometFade"];
 }
 
 
